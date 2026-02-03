@@ -968,6 +968,7 @@ export default function App() {
   const [warning, setWarning] = useState<string | null>(null);
   const [showNT, setShowNT] = useState(true);
   const [zoomEnabled, setZoomEnabled] = useState(true);
+  const [saveStatus, setSaveStatus] = useState<'saved' | 'saving' | 'error' | null>(null);
   const [concretoLocked, setConcretoLocked] = useState(false);
 
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
@@ -1074,11 +1075,18 @@ export default function App() {
 
   // Guardar estado persistido (debounced). Ignora fallos.
   useEffect(() => {
+    setSaveStatus('saving');
     const t = window.setTimeout(async () => {
       try {
         await saveState(payload);
-      } catch {
-        // ignore
+        setSaveStatus('saved');
+        // Ocultar mensaje después de 2 segundos
+        setTimeout(() => setSaveStatus(null), 2000);
+      } catch (err) {
+        setSaveStatus('error');
+        console.error('Error al guardar:', err);
+        // Ocultar mensaje de error después de 4 segundos
+        setTimeout(() => setSaveStatus(null), 4000);
       }
     }, 600);
     return () => window.clearTimeout(t);
@@ -1474,6 +1482,21 @@ export default function App() {
           <div className="title">BeamDraw - @MasconTech</div>
           <div className="subtitle">Config / Concreto / Acero / JSON</div>
         </div>
+
+        {/* Indicador de guardado */}
+        {saveStatus && (
+          <div className={`saveIndicator saveIndicator--${saveStatus}`}>
+            {saveStatus === 'saving' && (
+              <span>💾 Guardando {dev.name ?? 'DESARROLLO 01'}...</span>
+            )}
+            {saveStatus === 'saved' && (
+              <span>✅ {dev.name ?? 'DESARROLLO 01'} guardado</span>
+            )}
+            {saveStatus === 'error' && (
+              <span>❌ Error al guardar {dev.name ?? 'DESARROLLO 01'}</span>
+            )}
+          </div>
+        )}
 
         <div className="actions">
           <div className="segmented">
