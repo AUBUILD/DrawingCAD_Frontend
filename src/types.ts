@@ -46,6 +46,8 @@ export type DevelopmentIn = {
   name?: string;
   nodes: NodeIn[];
   spans: SpanIn[];
+  floor_start?: string;
+  floor_end?: string;
   d?: number;
   unit_scale?: number;
   x0?: number;
@@ -69,4 +71,14 @@ export type PreviewPolyline = {
 export type PreviewResponse = {
   developments: PreviewPolyline[];
   bounds: { min_x: number; max_x: number; min_y: number; max_y: number };
+};
+
+export type ImportDxfResponse = {
+  development: DevelopmentIn;
+  warnings: string[];
+};
+
+export type TemplateDxfInfo = {
+  filename: string;
+  layers: string[];
 };

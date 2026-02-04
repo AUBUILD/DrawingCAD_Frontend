@@ -17,8 +17,8 @@ Health: http://localhost:8000/api/health
 
 El frontend intenta guardar/cargar el estado desde el backend usando:
 
-- `GET /api/state`
-- `PUT /api/state`
+- `GET /api/projects/current`
+- `PUT /api/projects/current`
 
 Para habilitarlo, configura `DATABASE_URL` al arrancar el backend (ejemplo):
 
@@ -59,9 +59,19 @@ Hay dos formas típicas:
 ### Opción B: Frontend y backend en dominios distintos
 
 - Define la variable de entorno del frontend:
-  - `VITE_API_BASE=https://tu-backend.com`
+  - `VITE_API_URL=https://tu-backend.com`
+  - (compatibilidad) `VITE_API_BASE` también funciona.
 - Reconstruye el frontend (`npm run build`).
 - Asegúrate de habilitar CORS en el backend para el dominio del frontend.
+
+### Render (recomendado)
+
+- Backend: despliega el repo del backend (incluye `render.yaml`).
+- Frontend: despliega este repo como **Static Site** (o usa el `render.yaml` incluido).
+- En el frontend configura `VITE_API_URL` en Render (Build-time env var):
+  - Ejemplo: `https://beamdraw-backend.onrender.com`
+- En el backend configura `BEAMDRAW_ALLOWED_ORIGINS` con la URL pública del frontend:
+  - Ejemplo: `https://beamdraw-frontend.onrender.com`
 
 ## Formato de entrada
 
