@@ -1,0 +1,18 @@
+services:
+  - type: web
+    name: beamdraw-frontend
+    env: static
+    region: oregon
+    plan: free
+    branch: main
+    buildCommand: npm ci && npm run build
+    staticPublishPath: dist
+    envVars:
+      # Set this in Render to your backend URL, e.g. https://beamdraw-backend.onrender.com
+      - key: VITE_API_URL
+        sync: false
+    routes:
+      # SPA fallback
+      - type: rewrite
+        source: /*
+        destination: /index.html

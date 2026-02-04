@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import * as THREE from 'three';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
-import { exportDxf, fetchPreview, fetchState, saveState } from './api';
+import { clearTemplateDxf, exportDxf, fetchPreview, fetchState, getTemplateDxf, importDxf, saveState, uploadTemplateDxf } from './api';
 import type { DevelopmentIn, NodeIn, PreviewRequest, PreviewResponse, SpanIn, SteelKind, SteelMeta } from './types';
 
 type Tab = 'config' | 'concreto' | 'acero' | 'json';
@@ -81,6 +81,12 @@ const INITIAL_NODE: NodeIn = {
   steel_bottom_2_kind: 'continuous',
 };
 
+function fmt2(n: unknown): string {
+  const v = typeof n === 'number' ? n : Number(n);
+  if (!Number.isFinite(v)) return '';
+  return v.toFixed(2);
+}
+
 function clampNumber(n: unknown, fallback: number) {
   const v = typeof n === 'number' ? n : Number(n);
   return Number.isFinite(v) ? v : fallback;
@@ -134,6 +140,8 @@ function cloneNode(node: NodeIn): NodeIn {
 function defaultDevelopment(appCfg: AppConfig, name = 'DESARROLLO 01'): DevelopmentIn {
   return {
     name,
+    floor_start: '6to',
+    floor_end: '9no',
     d: appCfg.d,
     unit_scale: appCfg.unit_scale,
     x0: appCfg.x0,
@@ -187,6 +195,8 @@ function normalizeDev(input: DevelopmentIn, appCfg: AppConfig): DevelopmentIn {
   return {
     ...input,
     name: input.name ?? 'DESARROLLO 01',
+    floor_start: (input as any).floor_start ?? (input as any).floorStart ?? '6to',
+    floor_end: (input as any).floor_end ?? (input as any).floorEnd ?? '9no',
     d: appCfg.d,
     unit_scale: appCfg.unit_scale,
     x0: appCfg.x0,
@@ -971,9 +981,17 @@ export default function App() {
   const [saveStatus, setSaveStatus] = useState<'saved' | 'saving' | 'error' | null>(null);
   const [concretoLocked, setConcretoLocked] = useState(false);
 
+  const [templateName, setTemplateName] = useState<string | null>(null);
+  const [templateLayers, setTemplateLayers] = useState<string[]>([]);
+  const [cascoLayer, setCascoLayer] = useState<string>('A-BEAM-CASCO');
+  const [steelLayer, setSteelLayer] = useState<string>('A-REBAR-CORRIDO');
+  const [drawSteel, setDrawSteel] = useState<boolean>(true);
+
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const threeHostRef = useRef<HTMLDivElement | null>(null);
   const threeRef = useRef<ThreeSceneState | null>(null);
+  const dxfInputRef = useRef<HTMLInputElement | null>(null);
+  const templateInputRef = useRef<HTMLInputElement | null>(null);
 
   const spansCols = (dev.spans ?? []).length;
   const nodesCols = (dev.nodes ?? []).length;
@@ -1071,6 +1089,19 @@ export default function App() {
     return () => {
       cancelled = true;
     };
+  }, []);
+
+  // Intentar cargar info de plantilla si ya existe en backend.
+  useEffect(() => {
+    (async () => {
+      try {
+        const info = await getTemplateDxf();
+        setTemplateName(info.filename);
+        setTemplateLayers(info.layers ?? []);
+      } catch {
+        // ignore
+      }
+    })();
   }, []);
 
   // Guardar estado persistido (debounced). Ignora fallos.
@@ -1431,6 +1462,17 @@ export default function App() {
     });
   }
 
+  function clearDevelopment() {
+    const ok = window.confirm('¿Limpiar todos los datos y empezar un nuevo desarrollo?');
+    if (!ok) return;
+    setError(null);
+    setWarning(null);
+    setSelection({ kind: 'none' });
+    setViewport(null);
+    setConcretoLocked(false);
+    setDev(defaultDevelopment(appCfg));
+  }
+
   function removeSpan(spanIdx: number) {
     setDev((prev) => {
       const spans = (prev.spans ?? []).filter((_, i) => i !== spanIdx);
@@ -1441,8 +1483,67 @@ export default function App() {
   async function onExportDxf() {
     try {
       setBusy(true);
-      const blob = await exportDxf(payload);
+      const blob = await exportDxf(payload, { cascoLayer, steelLayer, drawSteel });
       downloadBlob(blob, `beamdrawing-${(dev.name ?? 'desarrollo').replace(/\s+/g, '_')}.dxf`);
+    } catch (e: any) {
+      setError(e?.message ?? String(e));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function onUploadTemplate(file: File) {
+    try {
+      setBusy(true);
+      setError(null);
+      const info = await uploadTemplateDxf(file);
+      setTemplateName(info.filename);
+      setTemplateLayers(info.layers ?? []);
+
+      if (info.layers?.length && !info.layers.includes(cascoLayer)) {
+        setCascoLayer(info.layers.includes('A-BEAM-CASCO') ? 'A-BEAM-CASCO' : info.layers[0]);
+      }
+    } catch (e: any) {
+      setError(e?.message ?? String(e));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function onClearTemplate() {
+    try {
+      setBusy(true);
+      setError(null);
+      await clearTemplateDxf();
+      setTemplateName(null);
+      setTemplateLayers([]);
+      setCascoLayer('A-BEAM-CASCO');
+      setSteelLayer('A-REBAR-CORRIDO');
+    } catch (e: any) {
+      setError(e?.message ?? String(e));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function onImportDxfFile(file: File) {
+    try {
+      setBusy(true);
+      setError(null);
+      setWarning(null);
+      const res = await importDxf(file);
+      // El DXF define geometría (L y nodos). Mantén h/b según el Tramo 1 actual.
+      const span1 = (dev.spans ?? [])[0] ?? INITIAL_SPAN;
+      const h0 = span1.h;
+      const b0 = span1.b ?? INITIAL_SPAN.b ?? 0;
+      const incoming: DevelopmentIn = {
+        ...res.development,
+        floor_start: (dev as any).floor_start ?? '6to',
+        floor_end: (dev as any).floor_end ?? '9no',
+        spans: (res.development.spans ?? []).map((s) => ({ ...s, h: h0, b: b0 })),
+      };
+      setDev(normalizeDev(incoming, appCfg));
+      if (res.warnings?.length) setWarning(res.warnings.join('\n'));
     } catch (e: any) {
       setError(e?.message ?? String(e));
     } finally {
@@ -1573,6 +1674,70 @@ export default function App() {
                   />
                 </label>
               </div>
+
+              <div className="hint"></div>
+              <div className="sectionHeader">
+                <div>Exportación DXF</div>
+                <div className="mutedSmall">Plantilla + asignación de capas (casco y acero opcional)</div>
+              </div>
+
+              <div className="rowBetween" style={{ gap: 10, alignItems: 'center' }}>
+                <div className="mutedSmall">
+                  Plantilla: <span className="mono">{templateName ?? '—'}</span>
+                </div>
+
+                <div style={{ display: 'flex', gap: 8 }}>
+                  <button className="btnSmall" type="button" onClick={() => templateInputRef.current?.click()} disabled={busy}>
+                    Cargar plantilla DXF
+                  </button>
+                  <button className="btnSmall" type="button" onClick={onClearTemplate} disabled={busy || !templateName}>
+                    Quitar plantilla
+                  </button>
+                  <input
+                    ref={templateInputRef}
+                    type="file"
+                    accept=".dxf"
+                    style={{ display: 'none' }}
+                    onChange={(e) => {
+                      const f = e.target.files?.[0];
+                      e.target.value = '';
+                      if (f) onUploadTemplate(f);
+                    }}
+                  />
+                </div>
+              </div>
+
+              <div className="grid4">
+                <label className="field">
+                  <div className="label">Capa Casco</div>
+                  <select className="input" value={cascoLayer} onChange={(e) => setCascoLayer(e.target.value)}>
+                    {Array.from(new Set(['A-BEAM-CASCO', ...(templateLayers ?? [])])).map((ly) => (
+                      <option key={ly} value={ly}>
+                        {ly}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+
+                <label className="field">
+                  <div className="label">Capa Acero</div>
+                  <select className="input" value={steelLayer} onChange={(e) => setSteelLayer(e.target.value)} disabled={!drawSteel}>
+                    {Array.from(new Set(['A-REBAR-CORRIDO', ...(templateLayers ?? [])])).map((ly) => (
+                      <option key={ly} value={ly}>
+                        {ly}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+
+                <label className="field" style={{ justifyContent: 'flex-end' }}>
+                  <div className="label">Dibujar acero</div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 10, height: 36 }}>
+                    <input type="checkbox" checked={drawSteel} onChange={(e) => setDrawSteel(e.target.checked)} />
+                    <div className="mutedSmall">{drawSteel ? 'Incluye' : 'Solo concreto'}</div>
+                  </div>
+                </label>
+              </div>
             </div>
           ) : null}
 
@@ -1588,9 +1753,90 @@ export default function App() {
                   <input className="input" value={dev.name ?? ''} readOnly={concretoLocked} onChange={(e) => updateDevPatch({ name: e.target.value })} />
                 </label>
                 <div className="nameActions">
+                  {(() => {
+                    const pisos = [
+                      '1er',
+                      '2do',
+                      '3er',
+                      '4to',
+                      '5to',
+                      '6to',
+                      '7mo',
+                      '8vo',
+                      '9no',
+                      '10mo',
+                      '11vo',
+                      '12vo',
+                      '13vo',
+                      '14vo',
+                      '15vo',
+                      '16vo',
+                      '17mo',
+                      '18vo',
+                      '19no',
+                      '20mo',
+                    ];
+                    return (
+                      <>
+                        <label className="field" style={{ width: 120 }}>
+                          <div className="label">Piso inicial</div>
+                          <select
+                            className="input"
+                            value={(dev as any).floor_start ?? '6to'}
+                            disabled={concretoLocked}
+                            onChange={(e) => updateDevPatch({ floor_start: e.target.value } as any)}
+                          >
+                            {pisos.map((p) => (
+                              <option key={`fs-${p}`} value={p}>
+                                {p}
+                              </option>
+                            ))}
+                          </select>
+                        </label>
+                        <label className="field" style={{ width: 120 }}>
+                          <div className="label">Piso final</div>
+                          <select
+                            className="input"
+                            value={(dev as any).floor_end ?? '9no'}
+                            disabled={concretoLocked}
+                            onChange={(e) => updateDevPatch({ floor_end: e.target.value } as any)}
+                          >
+                            {pisos.map((p) => (
+                              <option key={`fe-${p}`} value={p}>
+                                {p}
+                              </option>
+                            ))}
+                          </select>
+                        </label>
+                      </>
+                    );
+                  })()}
                   <button className="btnSmall" type="button" onClick={addSpan} disabled={concretoLocked}>
                     Añadir Tramo
                   </button>
+                  <button
+                    className="btnSmall"
+                    type="button"
+                    onClick={() => dxfInputRef.current?.click()}
+                    disabled={busy}
+                    title="Importar DXF (una viga)"
+                  >
+                    Importa DXF
+                  </button>
+                  <button className="btnSmall" type="button" onClick={clearDevelopment} disabled={busy} title="Reiniciar el desarrollo">
+                    Limpiar
+                  </button>
+                  <input
+                    ref={dxfInputRef}
+                    type="file"
+                    accept=".dxf"
+                    style={{ display: 'none' }}
+                    onChange={(e) => {
+                      const f = e.target.files?.[0];
+                      e.target.value = '';
+                      if (f) onImportDxfFile(f);
+                    }}
+                  />
                   <label className="toggle toggleTight" title={concretoLocked ? 'Edición bloqueada' : 'Edición habilitada'}>
                     <input type="checkbox" checked={concretoLocked} onChange={(e) => setConcretoLocked(e.target.checked)} />
                     <span>{concretoLocked ? '🔒' : '🔓'}</span>
@@ -1632,7 +1878,7 @@ export default function App() {
                           className="cellInput"
                           type="number"
                           step="0.01"
-                          value={s.L}
+                          value={fmt2(s.L)}
                           readOnly={concretoLocked}
                           onChange={(e) => updateSpan(i, { L: clampNumber(e.target.value, s.L) })}
                           onKeyDown={(e) => onGridKeyDown(e, 'spans', 0, i, 3, spansCols)}
@@ -1654,7 +1900,7 @@ export default function App() {
                           className="cellInput"
                           type="number"
                           step="0.01"
-                          value={s.h}
+                          value={fmt2(s.h)}
                           readOnly={concretoLocked}
                           onChange={(e) => updateSpan(i, { h: clampNumber(e.target.value, s.h) })}
                           onKeyDown={(e) => onGridKeyDown(e, 'spans', 1, i, 3, spansCols)}
@@ -1676,7 +1922,7 @@ export default function App() {
                           className="cellInput"
                           type="number"
                           step="0.01"
-                          value={s.b ?? 0}
+                          value={fmt2(s.b ?? 0)}
                           readOnly={concretoLocked}
                           onChange={(e) => updateSpan(i, { b: clampNumber(e.target.value, s.b ?? 0) })}
                           onKeyDown={(e) => onGridKeyDown(e, 'spans', 2, i, 3, spansCols)}
@@ -1713,7 +1959,7 @@ export default function App() {
                           className="cellInput"
                           type="number"
                           step="0.01"
-                          value={n.b1}
+                          value={fmt2(n.b1)}
                           readOnly={concretoLocked}
                           onChange={(e) => updateNode(i, { b1: clampNumber(e.target.value, n.b1) })}
                           onKeyDown={(e) => onGridKeyDown(e, 'nodes', 0, i, 5, nodesCols)}
@@ -1735,7 +1981,7 @@ export default function App() {
                           className="cellInput"
                           type="number"
                           step="0.01"
-                          value={n.b2}
+                          value={fmt2(n.b2)}
                           readOnly={concretoLocked}
                           onChange={(e) => updateNode(i, { b2: clampNumber(e.target.value, n.b2) })}
                           onKeyDown={(e) => onGridKeyDown(e, 'nodes', 1, i, 5, nodesCols)}
@@ -1776,7 +2022,7 @@ export default function App() {
                           className="cellInput"
                           type="number"
                           step="0.01"
-                          value={n.a2}
+                          value={fmt2(n.a2)}
                           readOnly={concretoLocked}
                           onChange={(e) => updateNode(i, { a2: clampNumber(e.target.value, n.a2) })}
                           onKeyDown={(e) => onGridKeyDown(e, 'nodes', 3, i, 5, nodesCols)}
