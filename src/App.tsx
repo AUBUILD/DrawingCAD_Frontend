@@ -5307,7 +5307,7 @@ export default function App() {
     <div className="layout">
       <header className="header">
         <div>
-          <div className="title">BeamDraw - @MasconTech</div>
+          <div className="title">AUBUILD - MASCON TECH.</div>
           <div className="subtitle">Config / Concreto / Acero / JSON</div>
         </div>
 
