@@ -1,4 +1,4 @@
-import type { ImportDxfResponse, PreviewRequest, PreviewResponse, TemplateDxfInfo } from './types';
+import type { BackendAppConfig, ExportDxfRequest, ImportDxfResponse, PreviewRequest, PreviewResponse, TemplateDxfInfo } from './types';
 
 function normalizeBaseUrl(raw: unknown): string {
   const v = typeof raw === 'string' ? raw.trim() : '';
@@ -26,8 +26,30 @@ export async function fetchPreview(payload: PreviewRequest): Promise<PreviewResp
   return res.json();
 }
 
+export async function fetchConfig(): Promise<BackendAppConfig> {
+  const res = await fetch(`${BASE}/api/config`, { method: 'GET' });
+  if (!res.ok) {
+    const text = await res.text();
+    throw new Error(text || `HTTP ${res.status}`);
+  }
+  return res.json();
+}
+
+export async function updateConfig(patch: Partial<BackendAppConfig>): Promise<BackendAppConfig> {
+  const res = await fetch(`${BASE}/api/config`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(patch ?? {}),
+  });
+  if (!res.ok) {
+    const text = await res.text();
+    throw new Error(text || `HTTP ${res.status}`);
+  }
+  return res.json();
+}
+
 export async function exportDxf(
-  payload: PreviewRequest,
+  payload: ExportDxfRequest,
   opts?: { cascoLayer?: string; steelLayer?: string; drawSteel?: boolean }
 ): Promise<Blob> {
   const q = new URLSearchParams();
