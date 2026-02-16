@@ -20,1387 +20,115 @@ import type {
 } from './types';
 
 import { computeSpanSectionLayoutWithBastonesCm, diameterToCm, getSteelLayoutSettings } from './steelLayout';
+import { applyBasicPreferenceToNodes, applyBasicPreferenceToSpans } from './services/steelService';
+import { useDebounce } from './hooks';
+import { AppProvider, useAppState, useAppActions } from './context';
+import { ConfigTab } from './components/ConfigTab';
+import { ConcreteTab } from './components/ConcreteTab';
+import { SteelTab } from './components/SteelTab';
+import { PreviewPanel } from './components/PreviewPanel';
+import {
+  // Geometry
+  mToUnits,
+  computeNodeOrigins,
+  computeSpanMidX,
+  computeSpanRangeX,
+  computeNodeMarkerX,
+  computeNodeLabelX,
+  spanIndexAtX,
+  nodeIndexAtX,
+  spanBAtX,
+  uniqueSortedNumbers,
+  // Stirrups
+  abcrFromLegacyTokens,
+  parseStirrupsSpec,
+  stirrupsPositionsFromTokens,
+  stirrupsBlocksFromSpec,
+  stirrupsRestSpacingFromSpec,
+  type StirrupBlock,
+  // Development
+  readPersonalizado,
+  cloneSteelMeta,
+  cloneSpan,
+  cloneNode,
+  normalizeStirrupsSection,
+  normalizeStirrupsDistribution,
+  normalizeBastonCfg,
+  normalizeBastonesSideCfg,
+  normalizeBastonesCfg,
+  normalizeDev,
+  defaultDevelopment,
+  toBackendPayload,
+  toPreviewPayload,
+  DEFAULT_APP_CFG,
+  DEFAULT_STEEL_META,
+  DEFAULT_STEEL_LAYOUT_SETTINGS,
+  INITIAL_SPAN,
+  INITIAL_NODE,
+  PERSONALIZADO_KEY,
+  type AppConfig,
+  type PersonalizadoPayloadV1,
+  // Steel
+  lengthFromTableMeters,
+  nodeSteelKind,
+  nodeToFaceEnabled,
+  nodeBastonLineKind,
+  nodeBastonLineToFaceEnabled,
+  buildNodeSlots,
+  type NodeSlot,
+  // Canvas
+  fitTransform,
+  canvasMapper,
+  canvasUnmapper,
+  clampBounds,
+  drawPreview,
+  drawCutMarker2D,
+  polySliceIntervals,
+  drawSelectionOverlay,
+  drawLabels,
+  type Bounds,
+  type Selection,
+  type PolyPt,
+  // Three
+  setEmissiveOnObject,
+  disposeObject3D,
+  setOrthoFrustum,
+  fitCameraToObject,
+  computeZoomBounds,
+  // App Utils
+  downloadBlob,
+} from './services';
+import {
+  clampNumber,
+  clampInt,
+  snap05m,
+  fmt2,
+  formatBeamNo,
+  levelPrefix,
+  computeBeamName,
+  formatOrdinalEs,
+  parseDefaultPref,
+  indexToLetters,
+  safeGetLocalStorage,
+  safeSetLocalStorage,
+  formatStirrupsABCR,
+  parseStirrupsABCR,
+  pickDefaultABCRForH,
+  normalizeDiaKey,
+  safeParseJson,
+  toJson,
+  type LevelType,
+  type DefaultPreferenceId,
+  type StirrupsABCR,
+  type StirrupToken,
+  type ParseResult,
+} from './utils';
 
 type Tab = 'config' | 'concreto' | 'acero' | 'json';
 type PreviewView = '2d' | '3d';
 type ThreeProjection = 'perspective' | 'orthographic';
 
-type LevelType = 'piso' | 'sotano' | 'azotea';
-
-function levelPrefix(t: LevelType): 'VT' | 'VS' | 'VA' {
-  if (t === 'sotano') return 'VS';
-  if (t === 'azotea') return 'VA';
-  return 'VT';
-}
-
-function clampInt(n: unknown, fallback: number) {
-  const v = typeof n === 'number' ? n : Number(String(n ?? '').trim());
-  if (!Number.isFinite(v)) return fallback;
-  return Math.trunc(v);
-}
-
-function formatBeamNo(n: number): string {
-  const i = Math.max(1, Math.min(9999, Math.trunc(n || 1)));
-  return String(i).padStart(2, '0');
-}
-
-function computeBeamName(t: LevelType, beamNo: number): string {
-  return `${levelPrefix(t)}-${formatBeamNo(beamNo)}`;
-}
-
-function formatOrdinalEs(n: number): string {
-  const i = Math.max(1, Math.min(30, Math.trunc(n || 1)));
-  // Mantener el estilo de abreviaturas ya usado en la UI (1er, 2do, 7mo, 9no, 10mo, 11vo...)
-  if (i === 1) return '1er';
-  if (i === 2) return '2do';
-  if (i === 3) return '3er';
-  const last = i % 10;
-  const inTeens = i >= 11 && i <= 15;
-  if (inTeens) return `${i}vo`;
-  if (last === 1) return `${i}er`;
-  if (last === 2) return `${i}do`;
-  if (last === 3) return `${i}er`;
-  if (last === 4 || last === 5 || last === 6) return `${i}to`;
-  if (last === 7 || last === 0) return `${i}mo`;
-  if (last === 8) return `${i}vo`;
-  if (last === 9) return `${i}no`;
-  return `${i}to`;
-}
-
-type AppConfig = {
-  d: number;
-  unit_scale: number;
-  x0: number;
-  y0: number;
-
-  // Acero (m)
-  recubrimiento: number;
-
-  // Bastones
-  baston_Lc: number; // m
-};
-
-type Bounds = { min_x: number; max_x: number; min_y: number; max_y: number };
-
-type Selection =
-  | { kind: 'node'; index: number }
-  | { kind: 'span'; index: number }
-  | { kind: 'none' };
-
-type ThreeSceneState = {
-  renderer: THREE.WebGLRenderer;
-  scene: THREE.Scene;
-  camera: THREE.PerspectiveCamera | THREE.OrthographicCamera;
-  perspCamera: THREE.PerspectiveCamera;
-  orthoCamera: THREE.OrthographicCamera;
-  controls: OrbitControls;
-  root: THREE.Group;
-  spans: THREE.Object3D[];
-  nodes: THREE.Object3D[];
-  spanSteel: THREE.Group[];
-  spanStirrups: THREE.Group[];
-  nodeSteel: THREE.Group[];
-  nodeStirrups: THREE.Group[];
-};
-
-function normalizeStirrupsDistribution(input: unknown): StirrupsDistributionIn | undefined {
-  if (!input || typeof input !== 'object') return undefined;
-  const src = input as any;
-  const cleanSpec = (v: any) => {
-    if (v == null) return null;
-    const s = String(v).trim();
-    return s ? s : null;
-  };
-
-  const design_mode = (() => {
-    const v = String(src.design_mode ?? '').trim().toLowerCase();
-    if (v === 'sismico' || v === 'sísmico') return 'sismico' as any;
-    if (v === 'gravedad') return 'gravedad' as any;
-    return null;
-  })();
-
-  const migrateSpec = (raw: any) => {
-    const s = String(raw ?? '').trim();
-    if (!s) return raw;
-    // si ya es ABCR, dejarlo.
-    if (parseStirrupsABCR(s)) return s;
-    // intentar migrar legacy tipo: 1@.05,8@.10,rto@.20
-    if (s.includes('@')) {
-      const toks = parseStirrupsSpec(s);
-      const abcr = abcrFromLegacyTokens(toks);
-      if (abcr) return formatStirrupsABCR(abcr);
-    }
-    return s;
-  };
-  const case_type = (() => {
-    const v = String(src.case_type ?? '').trim().toLowerCase();
-    if (v === 'simetrica' || v === 'asim_ambos' || v === 'asim_uno') return v as any;
-    return undefined;
-  })();
-  const single_end = (() => {
-    const v = String(src.single_end ?? '').trim().toLowerCase();
-    if (v === 'left' || v === 'right') return v as any;
-    return null;
-  })();
-  const ext_left_m = (() => {
-    if (src.ext_left_m == null || src.ext_left_m === '') return null;
-    const n = Number(src.ext_left_m);
-    return Number.isFinite(n) ? Math.max(0, n) : null;
-  })();
-  const ext_right_m = (() => {
-    if (src.ext_right_m == null || src.ext_right_m === '') return null;
-    const n = Number(src.ext_right_m);
-    return Number.isFinite(n) ? Math.max(0, n) : null;
-  })();
-
-  const out: StirrupsDistributionIn = {
-    case_type,
-    design_mode,
-    diameter: (() => {
-      const raw = String(src.diameter ?? '').trim();
-      const cleaned = normalizeDiaKey(raw.replace(/[∅Ø\s]/g, ''));
-      return cleaned ? cleaned : undefined;
-    })(),
-    left_spec: cleanSpec(migrateSpec(src.left_spec)),
-    center_spec: cleanSpec(migrateSpec(src.center_spec)),
-    right_spec: cleanSpec(migrateSpec(src.right_spec)),
-    single_end,
-    ext_left_m,
-    ext_right_m,
-  };
-
-  const hasAny =
-    out.case_type != null ||
-    (out.design_mode ?? null) != null ||
-    (out.diameter ?? null) != null ||
-    (out.left_spec ?? null) != null ||
-    (out.center_spec ?? null) != null ||
-    (out.right_spec ?? null) != null ||
-    (out.single_end ?? null) != null ||
-    (out.ext_left_m ?? null) != null ||
-    (out.ext_right_m ?? null) != null;
-
-  return hasAny ? out : undefined;
-}
-
-type ParseResult<T> = { ok: true; value: T } | { ok: false; error: string };
-
-const DEFAULT_APP_CFG: AppConfig = {
-  d: 0.25,
-  unit_scale: 2,
-  x0: 0,
-  y0: 0,
-  recubrimiento: 0.04,
-  baston_Lc: 0.5,
-};
-
-const DEFAULT_STEEL_META: SteelMeta = { qty: 3, diameter: '3/4' };
-
-const DEFAULT_STEEL_LAYOUT_SETTINGS: SteelLayoutSettings = {
-  dag_cm: 2.5,
-  use_practical_min: true,
-  practical_min_cm: 4.0,
-  max_rows_per_face: 3,
-  // col_rules + rebar_diameters_cm se completan por normalización (steelLayout.ts)
-};
-
-function cloneSteelMeta(m?: SteelMeta | null): SteelMeta {
-  const qty = Math.max(1, clampNumber(m?.qty ?? DEFAULT_STEEL_META.qty, DEFAULT_STEEL_META.qty));
-  const diameter = String(m?.diameter ?? DEFAULT_STEEL_META.diameter);
-  return { qty, diameter };
-}
-
-const INITIAL_SPAN: SpanIn = {
-  L: 3.0,
-  h: 0.5,
-  b: 0.3,
-  stirrups_section: { shape: 'rect', diameter: '3/8', qty: 1 },
-  steel_top: cloneSteelMeta(DEFAULT_STEEL_META),
-  steel_bottom: cloneSteelMeta(DEFAULT_STEEL_META),
-};
-
-function normalizeStirrupsSection(input: unknown) {
-  const src = (input ?? {}) as any;
-  const shape = String(src.shape ?? 'rect').trim().toLowerCase() === 'rect' ? 'rect' : 'rect';
-  const diameterRaw = String(src.diameter ?? '3/8').trim();
-  const diameter = normalizeDiaKey(diameterRaw.replace(/[∅Ø\s]/g, '')) || '3/8';
-  const qtyRaw = Number(src.qty ?? 1);
-  const qty = Number.isFinite(qtyRaw) ? Math.max(0, Math.floor(qtyRaw)) : 1;
-  return { shape: shape as any, diameter, qty } as { shape: 'rect'; diameter: string; qty: number };
-}
-
-const INITIAL_NODE: NodeIn = {
-  a1: 0.0,
-  a2: 0.5,
-  b1: 0.0,
-  b2: 0.5,
-  project_a: true,
-  project_b: true,
-  steel_top_1_to_face: false,
-  steel_top_2_to_face: false,
-  steel_bottom_1_to_face: false,
-  steel_bottom_2_to_face: false,
-  steel_top_continuous: true,
-  steel_top_hook: false,
-  steel_top_development: false,
-  steel_bottom_continuous: true,
-  steel_bottom_hook: false,
-  steel_bottom_development: false,
-  steel_top_1_kind: 'continuous',
-  steel_top_2_kind: 'continuous',
-  steel_bottom_1_kind: 'continuous',
-  steel_bottom_2_kind: 'continuous',
-
-  // Bastones (Z1/Z3) en nodos
-  baston_top_1_kind: 'continuous',
-  baston_top_2_kind: 'continuous',
-  baston_bottom_1_kind: 'continuous',
-  baston_bottom_2_kind: 'continuous',
-  baston_top_1_to_face: false,
-  baston_top_2_to_face: false,
-  baston_bottom_1_to_face: false,
-  baston_bottom_2_to_face: false,
-
-  baston_top_1_l1_kind: 'continuous',
-  baston_top_1_l2_kind: 'continuous',
-  baston_top_2_l1_kind: 'continuous',
-  baston_top_2_l2_kind: 'continuous',
-  baston_bottom_1_l1_kind: 'continuous',
-  baston_bottom_1_l2_kind: 'continuous',
-  baston_bottom_2_l1_kind: 'continuous',
-  baston_bottom_2_l2_kind: 'continuous',
-  baston_top_1_l1_to_face: false,
-  baston_top_1_l2_to_face: false,
-  baston_top_2_l1_to_face: false,
-  baston_top_2_l2_to_face: false,
-  baston_bottom_1_l1_to_face: false,
-  baston_bottom_1_l2_to_face: false,
-  baston_bottom_2_l1_to_face: false,
-  baston_bottom_2_l2_to_face: false,
-};
-
-function clampNumber(n: unknown, fallback: number) {
-  if (typeof n === 'string') {
-    // Permitir coma decimal (ej: "3,25") sin romper la edición manual.
-    const s = n.trim().replace(',', '.');
-    if (!s) return fallback;
-    const v = Number(s);
-    return Number.isFinite(v) ? v : fallback;
-  }
-
-  const v = typeof n === 'number' ? n : Number(n);
-  return Number.isFinite(v) ? v : fallback;
-}
-
-function snap05m(v: number) {
-  const step = 0.05; // 5 cm
-  const snapped = Math.round(v / step) * step;
-  return Math.round(snapped * 100) / 100;
-}
-
-function safeParseJson<T>(text: string): ParseResult<T> {
-  try {
-    return { ok: true, value: JSON.parse(text) as T };
-  } catch (e: any) {
-    return { ok: false, error: e?.message ?? 'JSON inválido' };
-  }
-}
-
-function toJson(value: unknown) {
-  return JSON.stringify(value, null, 2);
-}
-
-function cloneSpan(span: SpanIn): SpanIn {
-  return {
-    L: span.L,
-    h: span.h,
-    b: span.b ?? 0,
-    stirrups_section: normalizeStirrupsSection((span as any).stirrups_section ?? (span as any).stirrupsSection),
-    steel_top: cloneSteelMeta(span.steel_top),
-    steel_bottom: cloneSteelMeta(span.steel_bottom),
-    bastones: span.bastones ? JSON.parse(JSON.stringify(span.bastones)) : undefined,
-  };
-}
-
-function cloneNode(node: NodeIn): NodeIn {
-  const legacyTop = steelKindLegacy(node, 'top');
-  const legacyBottom = steelKindLegacy(node, 'bottom');
-  return {
-    a1: 0.0,
-    a2: node.a2,
-    b1: node.b1 ?? 0,
-    b2: node.b2,
-    project_a: node.project_a ?? true,
-    project_b: node.project_b ?? true,
-    steel_top_1_to_face: (node as any).steel_top_1_to_face ?? false,
-    steel_top_2_to_face: (node as any).steel_top_2_to_face ?? false,
-    steel_bottom_1_to_face: (node as any).steel_bottom_1_to_face ?? false,
-    steel_bottom_2_to_face: (node as any).steel_bottom_2_to_face ?? false,
-    steel_top_continuous: node.steel_top_continuous ?? true,
-    steel_top_hook: node.steel_top_hook ?? false,
-    steel_top_development: node.steel_top_development ?? false,
-    steel_bottom_continuous: node.steel_bottom_continuous ?? true,
-    steel_bottom_hook: node.steel_bottom_hook ?? false,
-    steel_bottom_development: node.steel_bottom_development ?? false,
-    steel_top_1_kind: node.steel_top_1_kind ?? legacyTop,
-    steel_top_2_kind: node.steel_top_2_kind ?? legacyTop,
-    steel_bottom_1_kind: node.steel_bottom_1_kind ?? legacyBottom,
-    steel_bottom_2_kind: node.steel_bottom_2_kind ?? legacyBottom,
-
-    baston_top_1_kind: (node as any).baston_top_1_kind ?? 'continuous',
-    baston_top_2_kind: (node as any).baston_top_2_kind ?? 'continuous',
-    baston_bottom_1_kind: (node as any).baston_bottom_1_kind ?? 'continuous',
-    baston_bottom_2_kind: (node as any).baston_bottom_2_kind ?? 'continuous',
-    baston_top_1_to_face: (node as any).baston_top_1_to_face ?? false,
-    baston_top_2_to_face: (node as any).baston_top_2_to_face ?? false,
-    baston_bottom_1_to_face: (node as any).baston_bottom_1_to_face ?? false,
-    baston_bottom_2_to_face: (node as any).baston_bottom_2_to_face ?? false,
-
-    baston_top_1_l1_kind: (node as any).baston_top_1_l1_kind ?? (node as any).baston_top_1_kind ?? 'continuous',
-    baston_top_1_l2_kind: (node as any).baston_top_1_l2_kind ?? (node as any).baston_top_1_kind ?? 'continuous',
-    baston_top_2_l1_kind: (node as any).baston_top_2_l1_kind ?? (node as any).baston_top_2_kind ?? 'continuous',
-    baston_top_2_l2_kind: (node as any).baston_top_2_l2_kind ?? (node as any).baston_top_2_kind ?? 'continuous',
-    baston_bottom_1_l1_kind: (node as any).baston_bottom_1_l1_kind ?? (node as any).baston_bottom_1_kind ?? 'continuous',
-    baston_bottom_1_l2_kind: (node as any).baston_bottom_1_l2_kind ?? (node as any).baston_bottom_1_kind ?? 'continuous',
-    baston_bottom_2_l1_kind: (node as any).baston_bottom_2_l1_kind ?? (node as any).baston_bottom_2_kind ?? 'continuous',
-    baston_bottom_2_l2_kind: (node as any).baston_bottom_2_l2_kind ?? (node as any).baston_bottom_2_kind ?? 'continuous',
-
-    baston_top_1_l1_to_face: (node as any).baston_top_1_l1_to_face ?? (node as any).baston_top_1_to_face ?? false,
-    baston_top_1_l2_to_face: (node as any).baston_top_1_l2_to_face ?? (node as any).baston_top_1_to_face ?? false,
-    baston_top_2_l1_to_face: (node as any).baston_top_2_l1_to_face ?? (node as any).baston_top_2_to_face ?? false,
-    baston_top_2_l2_to_face: (node as any).baston_top_2_l2_to_face ?? (node as any).baston_top_2_to_face ?? false,
-    baston_bottom_1_l1_to_face: (node as any).baston_bottom_1_l1_to_face ?? (node as any).baston_bottom_1_to_face ?? false,
-    baston_bottom_1_l2_to_face: (node as any).baston_bottom_1_l2_to_face ?? (node as any).baston_bottom_1_to_face ?? false,
-    baston_bottom_2_l1_to_face: (node as any).baston_bottom_2_l1_to_face ?? (node as any).baston_bottom_2_to_face ?? false,
-    baston_bottom_2_l2_to_face: (node as any).baston_bottom_2_l2_to_face ?? (node as any).baston_bottom_2_to_face ?? false,
-  };
-}
-
-function defaultDevelopment(appCfg: AppConfig, name = 'DESARROLLO 01'): DevelopmentIn {
-  const level_type: LevelType = 'piso';
-  const beam_no = 1;
-  return {
-    // El nombre se genera automáticamente por tipo + número.
-    name: computeBeamName(level_type, beam_no),
-    level_type: level_type as any,
-    beam_no: beam_no as any,
-    floor_start: '6to',
-    floor_end: '9no',
-    d: appCfg.d,
-    unit_scale: appCfg.unit_scale,
-    x0: appCfg.x0,
-    y0: appCfg.y0,
-    recubrimiento: appCfg.recubrimiento,
-    baston_Lc: appCfg.baston_Lc,
-    steel_layout_settings: { ...DEFAULT_STEEL_LAYOUT_SETTINGS },
-    spans: [cloneSpan(INITIAL_SPAN)],
-    nodes: [cloneNode(INITIAL_NODE), cloneNode(INITIAL_NODE)],
-  };
-}
-
-function normalizeBastonCfg(input: unknown): BastonCfg {
-  const src = (input ?? {}) as any;
-  // Legacy -> new mapping: if only legacy is present, mirror into both lines.
-  const legacyEnabled = src.enabled;
-  const legacyQty = src.qty;
-  const legacyDia = src.diameter;
-
-  const legacyEnabledTrue = legacyEnabled === true;
-
-  const l1_enabled = Boolean(src.l1_enabled ?? legacyEnabled ?? false);
-  const l2_enabled = Boolean(src.l2_enabled ?? legacyEnabled ?? false);
-
-  const l1_qty_raw = clampNumber(src.l1_qty ?? legacyQty ?? 1, 1);
-  const l2_qty_raw = clampNumber(src.l2_qty ?? legacyQty ?? 1, 1);
-  const l1_qty = Math.max(1, Math.min(3, Math.round(l1_qty_raw)));
-  const l2_qty = Math.max(1, Math.min(3, Math.round(l2_qty_raw)));
-
-  const l1_diameter = String(src.l1_diameter ?? legacyDia ?? '3/4');
-  const l2_diameter = String(src.l2_diameter ?? legacyDia ?? '3/4');
-
-  const L1_m_raw = typeof src.L1_m === 'number' ? src.L1_m : undefined;
-  const L2_m_raw = typeof src.L2_m === 'number' ? src.L2_m : undefined;
-  const L3_m_raw = typeof src.L3_m === 'number' ? src.L3_m : undefined;
-  const L1_m = typeof L1_m_raw === 'number' && Number.isFinite(L1_m_raw) && L1_m_raw > 0 ? L1_m_raw : undefined;
-  const L2_m = typeof L2_m_raw === 'number' && Number.isFinite(L2_m_raw) && L2_m_raw > 0 ? L2_m_raw : undefined;
-  const L3_m = typeof L3_m_raw === 'number' && Number.isFinite(L3_m_raw) && L3_m_raw > 0 ? L3_m_raw : undefined;
-
-  return {
-    l1_enabled,
-    l1_qty,
-    l1_diameter,
-    l2_enabled,
-    l2_qty,
-    l2_diameter,
-    // keep legacy mirrors for any older code paths
-    // Important: don't let a legacy `enabled: false` override the new per-line toggles.
-    enabled: Boolean(legacyEnabledTrue || l1_enabled || l2_enabled),
-    qty: Number.isFinite(Number(legacyQty)) ? legacyQty : l1_qty,
-    diameter: legacyDia != null ? String(legacyDia) : l1_diameter,
-    L1_m,
-    L2_m,
-    L3_m,
-  };
-}
-
-function normalizeBastonesSideCfg(input: unknown): BastonesSideCfg {
-  const src = (input ?? {}) as any;
-  return {
-    z1: normalizeBastonCfg(src.z1),
-    z2: normalizeBastonCfg(src.z2),
-    z3: normalizeBastonCfg(src.z3),
-  };
-}
-
-function normalizeBastonesCfg(input: unknown): BastonesCfg {
-  const src = (input ?? {}) as any;
-  return {
-    top: normalizeBastonesSideCfg(src.top),
-    bottom: normalizeBastonesSideCfg(src.bottom),
-  };
-}
-
-function normalizeDev(input: DevelopmentIn, appCfg: AppConfig): DevelopmentIn {
-  const spans = (input.spans ?? []).map((s) => {
-    const L = Math.max(0, clampNumber(s.L, INITIAL_SPAN.L));
-    const h = Math.max(0, clampNumber(s.h, INITIAL_SPAN.h));
-    const b = Math.max(0, clampNumber((s as any).b ?? INITIAL_SPAN.b, INITIAL_SPAN.b ?? 0));
-
-    let stirrups = normalizeStirrupsDistribution((s as any).stirrups);
-    const ct = String((stirrups as any)?.case_type ?? 'simetrica').trim().toLowerCase();
-    const modeRaw = String((stirrups as any)?.design_mode ?? 'sismico').trim().toLowerCase();
-    const mode: 'sismico' | 'gravedad' = modeRaw === 'gravedad' ? 'gravedad' : 'sismico';
-
-    const defaultSpec = formatStirrupsABCR(pickDefaultABCRForH(h, mode));
-    const applyDefaults = () => {
-      if (ct === 'asim_uno') {
-        return {
-          case_type: 'asim_uno' as any,
-          design_mode: mode as any,
-          diameter: '3/8',
-          left_spec: defaultSpec,
-          center_spec: defaultSpec,
-          right_spec: null,
-        } as StirrupsDistributionIn;
-      }
-      return {
-        case_type: (ct === 'asim_ambos' ? 'asim_ambos' : 'simetrica') as any,
-        design_mode: mode as any,
-        diameter: '3/8',
-        left_spec: defaultSpec,
-        center_spec: null,
-        right_spec: defaultSpec,
-      } as StirrupsDistributionIn;
-    };
-
-    if (!stirrups) {
-      stirrups = applyDefaults();
-    } else {
-      // Completar modo si falta
-      if ((stirrups as any).design_mode == null) (stirrups as any).design_mode = mode;
-
-      // Completar diámetro si falta
-      const diaRaw = String((stirrups as any).diameter ?? '').trim();
-      const diaClean = normalizeDiaKey(diaRaw.replace(/[∅Ø\s]/g, ''));
-      (stirrups as any).diameter = diaClean || '3/8';
-
-      const hasAnySpec = Boolean(
-        String((stirrups as any).left_spec ?? '').trim() ||
-          String((stirrups as any).center_spec ?? '').trim() ||
-          String((stirrups as any).right_spec ?? '').trim()
-      );
-
-      if (!hasAnySpec) {
-        stirrups = { ...stirrups, ...applyDefaults() };
-      } else if (ct === 'simetrica') {
-        // En simétrica, si falta uno de los lados, completarlo con el otro.
-        const ls = String((stirrups as any).left_spec ?? '').trim();
-        const rs = String((stirrups as any).right_spec ?? '').trim();
-        if (ls && !rs) stirrups = { ...stirrups, right_spec: ls };
-        if (rs && !ls) stirrups = { ...stirrups, left_spec: rs };
-      }
-    }
-
-    return {
-      L,
-      h,
-      b,
-      stirrups_section: normalizeStirrupsSection((s as any).stirrups_section ?? (s as any).stirrupsSection ?? (INITIAL_SPAN as any).stirrups_section),
-      stirrups,
-      steel_top: cloneSteelMeta((s as any).steel_top ?? (s as any).steelTop),
-      steel_bottom: cloneSteelMeta((s as any).steel_bottom ?? (s as any).steelBottom),
-      bastones: normalizeBastonesCfg((s as any).bastones),
-    };
-  });
-
-  const nodes: NodeIn[] = (input.nodes ?? []).map((n) => {
-    const legacyTop = steelKindLegacy(n, 'top');
-    const legacyBottom = steelKindLegacy(n, 'bottom');
-    return {
-      a1: 0.0,
-      a2: Math.max(0, clampNumber(n.a2, INITIAL_NODE.a2)),
-      b1: Math.max(0, clampNumber(n.b1 ?? INITIAL_NODE.b1, INITIAL_NODE.b1)),
-      b2: Math.max(0, clampNumber(n.b2, INITIAL_NODE.b2)),
-      project_a: n.project_a ?? true,
-      project_b: n.project_b ?? true,
-      steel_top_1_to_face: (n as any).steel_top_1_to_face ?? (n as any).steelTop1ToFace ?? false,
-      steel_top_2_to_face: (n as any).steel_top_2_to_face ?? (n as any).steelTop2ToFace ?? false,
-      steel_bottom_1_to_face: (n as any).steel_bottom_1_to_face ?? (n as any).steelBottom1ToFace ?? false,
-      steel_bottom_2_to_face: (n as any).steel_bottom_2_to_face ?? (n as any).steelBottom2ToFace ?? false,
-      steel_top_continuous: n.steel_top_continuous ?? true,
-      steel_top_hook: n.steel_top_hook ?? false,
-      steel_top_development: n.steel_top_development ?? false,
-      steel_bottom_continuous: n.steel_bottom_continuous ?? true,
-      steel_bottom_hook: n.steel_bottom_hook ?? false,
-      steel_bottom_development: n.steel_bottom_development ?? false,
-      steel_top_1_kind: (n as any).steel_top_1_kind ?? (n as any).steelTop1Kind ?? legacyTop,
-      steel_top_2_kind: (n as any).steel_top_2_kind ?? (n as any).steelTop2Kind ?? legacyTop,
-      steel_bottom_1_kind: (n as any).steel_bottom_1_kind ?? (n as any).steelBottom1Kind ?? legacyBottom,
-      steel_bottom_2_kind: (n as any).steel_bottom_2_kind ?? (n as any).steelBottom2Kind ?? legacyBottom,
-
-      baston_top_1_kind: (n as any).baston_top_1_kind ?? (n as any).bastonTop1Kind ?? 'continuous',
-      baston_top_2_kind: (n as any).baston_top_2_kind ?? (n as any).bastonTop2Kind ?? 'continuous',
-      baston_bottom_1_kind: (n as any).baston_bottom_1_kind ?? (n as any).bastonBottom1Kind ?? 'continuous',
-      baston_bottom_2_kind: (n as any).baston_bottom_2_kind ?? (n as any).bastonBottom2Kind ?? 'continuous',
-      baston_top_1_to_face: (n as any).baston_top_1_to_face ?? (n as any).bastonTop1ToFace ?? false,
-      baston_top_2_to_face: (n as any).baston_top_2_to_face ?? (n as any).bastonTop2ToFace ?? false,
-      baston_bottom_1_to_face: (n as any).baston_bottom_1_to_face ?? (n as any).bastonBottom1ToFace ?? false,
-      baston_bottom_2_to_face: (n as any).baston_bottom_2_to_face ?? (n as any).bastonBottom2ToFace ?? false,
-
-      baston_top_1_l1_kind: (n as any).baston_top_1_l1_kind ?? (n as any).bastonTop1L1Kind ?? (n as any).baston_top_1_kind ?? 'continuous',
-      baston_top_1_l2_kind: (n as any).baston_top_1_l2_kind ?? (n as any).bastonTop1L2Kind ?? (n as any).baston_top_1_kind ?? 'continuous',
-      baston_top_2_l1_kind: (n as any).baston_top_2_l1_kind ?? (n as any).bastonTop2L1Kind ?? (n as any).baston_top_2_kind ?? 'continuous',
-      baston_top_2_l2_kind: (n as any).baston_top_2_l2_kind ?? (n as any).bastonTop2L2Kind ?? (n as any).baston_top_2_kind ?? 'continuous',
-      baston_bottom_1_l1_kind: (n as any).baston_bottom_1_l1_kind ?? (n as any).bastonBottom1L1Kind ?? (n as any).baston_bottom_1_kind ?? 'continuous',
-      baston_bottom_1_l2_kind: (n as any).baston_bottom_1_l2_kind ?? (n as any).bastonBottom1L2Kind ?? (n as any).baston_bottom_1_kind ?? 'continuous',
-      baston_bottom_2_l1_kind: (n as any).baston_bottom_2_l1_kind ?? (n as any).bastonBottom2L1Kind ?? (n as any).baston_bottom_2_kind ?? 'continuous',
-      baston_bottom_2_l2_kind: (n as any).baston_bottom_2_l2_kind ?? (n as any).bastonBottom2L2Kind ?? (n as any).baston_bottom_2_kind ?? 'continuous',
-
-      baston_top_1_l1_to_face: (n as any).baston_top_1_l1_to_face ?? (n as any).bastonTop1L1ToFace ?? (n as any).baston_top_1_to_face ?? false,
-      baston_top_1_l2_to_face: (n as any).baston_top_1_l2_to_face ?? (n as any).bastonTop1L2ToFace ?? (n as any).baston_top_1_to_face ?? false,
-      baston_top_2_l1_to_face: (n as any).baston_top_2_l1_to_face ?? (n as any).bastonTop2L1ToFace ?? (n as any).baston_top_2_to_face ?? false,
-      baston_top_2_l2_to_face: (n as any).baston_top_2_l2_to_face ?? (n as any).bastonTop2L2ToFace ?? (n as any).baston_top_2_to_face ?? false,
-      baston_bottom_1_l1_to_face: (n as any).baston_bottom_1_l1_to_face ?? (n as any).bastonBottom1L1ToFace ?? (n as any).baston_bottom_1_to_face ?? false,
-      baston_bottom_1_l2_to_face: (n as any).baston_bottom_1_l2_to_face ?? (n as any).bastonBottom1L2ToFace ?? (n as any).baston_bottom_1_to_face ?? false,
-      baston_bottom_2_l1_to_face: (n as any).baston_bottom_2_l1_to_face ?? (n as any).bastonBottom2L1ToFace ?? (n as any).baston_bottom_2_to_face ?? false,
-      baston_bottom_2_l2_to_face: (n as any).baston_bottom_2_l2_to_face ?? (n as any).bastonBottom2L2ToFace ?? (n as any).baston_bottom_2_to_face ?? false,
-    };
-  });
-
-  const safeSpans = spans.length ? spans : [cloneSpan(INITIAL_SPAN)];
-  const desiredNodes = safeSpans.length + 1;
-  const safeNodes = nodes.slice(0, desiredNodes);
-
-  const lastNode = safeNodes.length ? safeNodes[safeNodes.length - 1] : cloneNode(INITIAL_NODE);
-  while (safeNodes.length < desiredNodes) safeNodes.push(cloneNode(lastNode));
-
-  const prevName = String((input as any).name ?? '').trim();
-  const inferredType = (() => {
-    const m = prevName.match(/^\s*(VT|VS|VA)\s*[-=]?\s*(\d+)/i);
-    const p = (m?.[1] ?? '').toUpperCase();
-    if (p === 'VS') return 'sotano' as LevelType;
-    if (p === 'VA') return 'azotea' as LevelType;
-    if (p === 'VT') return 'piso' as LevelType;
-    return null;
-  })();
-  const level_type: LevelType = (() => {
-    const raw = String((input as any).level_type ?? (input as any).levelType ?? '').trim().toLowerCase();
-    if (raw === 'sotano' || raw === 'sótano') return 'sotano';
-    if (raw === 'azotea') return 'azotea';
-    if (raw === 'piso') return 'piso';
-    return inferredType ?? 'piso';
-  })();
-  const beam_no: number = (() => {
-    const raw = (input as any).beam_no ?? (input as any).beamNo;
-    const inferred = (() => {
-      const m = prevName.match(/^\s*(VT|VS|VA)\s*[-=]?\s*(\d+)/i);
-      if (!m?.[2]) return null;
-      const v = Number(m[2]);
-      return Number.isFinite(v) ? v : null;
-    })();
-    const v = clampInt(raw ?? inferred ?? 1, 1);
-    return Math.max(1, Math.min(9999, v));
-  })();
-
-  const nextName = computeBeamName(level_type, beam_no);
-
-  return {
-    ...input,
-    name: nextName,
-    level_type: level_type as any,
-    beam_no: beam_no as any,
-    floor_start: level_type === 'azotea' ? undefined : ((input as any).floor_start ?? (input as any).floorStart ?? '6to'),
-    floor_end: level_type === 'azotea' ? undefined : ((input as any).floor_end ?? (input as any).floorEnd ?? '9no'),
-    d: appCfg.d,
-    unit_scale: appCfg.unit_scale,
-    x0: appCfg.x0,
-    y0: appCfg.y0,
-    recubrimiento: appCfg.recubrimiento,
-    baston_Lc: appCfg.baston_Lc,
-    steel_layout_settings: (() => {
-      const incoming = (input as any).steel_layout_settings ?? (input as any).steelLayoutSettings ?? null;
-      const dag_cm = clampNumber(incoming?.dag_cm ?? DEFAULT_STEEL_LAYOUT_SETTINGS.dag_cm, DEFAULT_STEEL_LAYOUT_SETTINGS.dag_cm);
-      const max_rows_per_face = Math.max(1, Math.min(3, Math.round(clampNumber(incoming?.max_rows_per_face ?? DEFAULT_STEEL_LAYOUT_SETTINGS.max_rows_per_face, DEFAULT_STEEL_LAYOUT_SETTINGS.max_rows_per_face ?? 3))));
-      return {
-        dag_cm,
-        use_practical_min: (incoming?.use_practical_min ?? incoming?.usePracticalMin ?? DEFAULT_STEEL_LAYOUT_SETTINGS.use_practical_min) as any,
-        practical_min_cm: clampNumber(incoming?.practical_min_cm ?? incoming?.practicalMinCm ?? DEFAULT_STEEL_LAYOUT_SETTINGS.practical_min_cm, DEFAULT_STEEL_LAYOUT_SETTINGS.practical_min_cm ?? 4.0),
-        max_rows_per_face,
-        col_rules: Array.isArray(incoming?.col_rules ?? incoming?.colRules) ? (incoming?.col_rules ?? incoming?.colRules) : undefined,
-        rebar_diameters_cm: (incoming?.rebar_diameters_cm ?? incoming?.rebarDiametersCm) ?? undefined,
-      } as SteelLayoutSettings;
-    })(),
-    spans: safeSpans,
-    nodes: safeNodes,
-  };
-}
-
-function toBackendPayload(dev: DevelopmentIn): PreviewRequest {
-  return {
-    developments: [dev],
-  } as PreviewRequest;
-}
-
-function toPreviewPayload(dev: DevelopmentIn): PreviewRequest {
-  // Preview backend only needs concrete geometry (spans + nodes + global scales).
-  // Stripping steel fields avoids expensive/refetch churn when editing acero.
-  const spans = (dev.spans ?? []).map((s) => ({
-    L: s.L,
-    h: s.h,
-    b: (s as any).b,
-  }));
-  const nodes = (dev.nodes ?? []).map((n) => ({
-    a1: (n as any).a1,
-    a2: n.a2,
-    b1: n.b1,
-    b2: n.b2,
-    project_a: (n as any).project_a,
-    project_b: (n as any).project_b,
-  }));
-  const minimal: DevelopmentIn = {
-    name: dev.name,
-    level_type: (dev as any).level_type,
-    beam_no: (dev as any).beam_no,
-    floor_start: (dev as any).floor_start,
-    floor_end: (dev as any).floor_end,
-    d: (dev as any).d,
-    unit_scale: dev.unit_scale,
-    x0: dev.x0,
-    y0: dev.y0,
-    spans,
-    nodes,
-  };
-  return { developments: [minimal] } as PreviewRequest;
-}
-
-function fitTransform(bounds: Bounds, w: number, h: number) {
-  const pad = 20;
-  const dx = Math.max(bounds.max_x - bounds.min_x, 1e-6);
-  const dy = Math.max(bounds.max_y - bounds.min_y, 1e-6);
-  const scale = Math.min((w - pad * 2) / dx, (h - pad * 2) / dy);
-  return { pad, scale };
-}
-
-function canvasMapper(bounds: Bounds, w: number, h: number) {
-  const { pad, scale } = fitTransform(bounds, w, h);
-  const bx0 = bounds.min_x;
-  const by1 = bounds.max_y;
-  return {
-    toCanvas(x: number, y: number) {
-      const cx = pad + (x - bx0) * scale;
-      const cy = pad + (by1 - y) * scale;
-      return [cx, cy] as const;
-    },
-  };
-}
-
-function canvasUnmapper(bounds: Bounds, w: number, h: number) {
-  const { pad, scale } = fitTransform(bounds, w, h);
-  const bx0 = bounds.min_x;
-  const by1 = bounds.max_y;
-  return {
-    toWorld(cx: number, cy: number) {
-      const x = bx0 + (cx - pad) / scale;
-      const y = by1 - (cy - pad) / scale;
-      return [x, y] as const;
-    },
-  };
-}
-
-function clampBounds(inner: Bounds, outer: Bounds): Bounds {
-  const dx = outer.max_x - outer.min_x;
-  const dy = outer.max_y - outer.min_y;
-  const w = Math.min(inner.max_x - inner.min_x, dx);
-  const h = Math.min(inner.max_y - inner.min_y, dy);
-
-  let min_x = inner.min_x;
-  let max_x = inner.max_x;
-  let min_y = inner.min_y;
-  let max_y = inner.max_y;
-
-  if (w < dx) {
-    min_x = Math.max(outer.min_x, Math.min(min_x, outer.max_x - w));
-    max_x = min_x + w;
-  } else {
-    min_x = outer.min_x;
-    max_x = outer.max_x;
-  }
-
-  if (h < dy) {
-    min_y = Math.max(outer.min_y, Math.min(min_y, outer.max_y - h));
-    max_y = min_y + h;
-  } else {
-    min_y = outer.min_y;
-    max_y = outer.max_y;
-  }
-
-  return { min_x, max_x, min_y, max_y };
-}
-
-function drawPreview(canvas: HTMLCanvasElement, data: PreviewResponse | null, renderBounds?: Bounds | null) {
-  const ctx = canvas.getContext('2d');
-  if (!ctx) return;
-
-  // DPR-aware canvas for crisper lines/text
-  const dpr = window.devicePixelRatio || 1;
-  const rect = canvas.getBoundingClientRect();
-  const cssW = Math.max(1, Math.round(rect.width));
-  const cssH = Math.max(1, Math.round(rect.height));
-  const desiredW = Math.round(cssW * dpr);
-  const desiredH = Math.round(cssH * dpr);
-  if (canvas.width !== desiredW || canvas.height !== desiredH) {
-    canvas.width = desiredW;
-    canvas.height = desiredH;
-  }
-  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-
-  // Clear in CSS pixel space (after setTransform)
-  ctx.clearRect(0, 0, cssW, cssH);
-
-  if (!data) {
-    ctx.fillStyle = 'rgba(229,231,235,0.6)';
-    ctx.font = '12px ui-monospace, Menlo, Consolas, monospace';
-    ctx.fillText('Sin datos de vista previa', 14, 22);
-    return;
-  }
-
-  const bounds = renderBounds ?? data.bounds;
-  const { toCanvas } = canvasMapper(bounds, cssW, cssH);
-
-  const snap = (v: number) => Math.round(v) + 0.5;
-
-  // Desarrollo (contorno)
-  ctx.lineWidth = 2;
-  ctx.strokeStyle = 'rgba(20,184,166,0.95)';
-
-  for (const pl of data.developments ?? []) {
-    const pts = pl.points ?? [];
-    if (pts.length < 2) continue;
-    ctx.beginPath();
-    for (let i = 0; i < pts.length; i++) {
-      const [x, y] = pts[i];
-      const [cx, cy] = toCanvas(x, y);
-      const sx = snap(cx);
-      const sy = snap(cy);
-      if (i === 0) ctx.moveTo(sx, sy);
-      else ctx.lineTo(sx, sy);
-    }
-    ctx.stroke();
-  }
-}
-
-function indexToLetters(idx: number): string {
-  // A..Z, AA..AZ, BA.. etc.
-  let n = Math.max(0, Math.floor(idx));
-  let out = '';
-  do {
-    out = String.fromCharCode(65 + (n % 26)) + out;
-    n = Math.floor(n / 26) - 1;
-  } while (n >= 0);
-  return out;
-}
-
-function drawCutMarker2D(canvas: HTMLCanvasElement, data: PreviewResponse, renderBounds: Bounds, xU: number) {
-  const ctx = canvas.getContext('2d');
-  if (!ctx) return;
-
-  const dpr = window.devicePixelRatio || 1;
-  const rect = canvas.getBoundingClientRect();
-  const cssW = Math.max(1, Math.round(rect.width));
-  const cssH = Math.max(1, Math.round(rect.height));
-  // Importante: NO redimensionar el canvas aquí.
-  // Redimensionar (canvas.width/height) limpia el buffer y borraría lo ya dibujado por drawPreview.
-  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-
-  const bounds = renderBounds ?? (data.bounds as Bounds);
-  const { toCanvas } = canvasMapper(bounds, cssW, cssH);
-  const x = Math.min(bounds.max_x, Math.max(bounds.min_x, xU));
-  const [cxTop, cyTop] = toCanvas(x, bounds.max_y);
-  const [, cyBot] = toCanvas(x, bounds.min_y);
-
-  ctx.save();
-  ctx.strokeStyle = 'rgba(249,115,22,0.95)';
-  ctx.lineWidth = 2;
-  ctx.beginPath();
-  ctx.moveTo(cxTop, cyTop);
-  ctx.lineTo(cxTop, cyBot);
-  ctx.stroke();
-
-  // Marcadores simples arriba/abajo
-  const tri = 7;
-  ctx.fillStyle = 'rgba(249,115,22,0.95)';
-  ctx.beginPath();
-  ctx.moveTo(cxTop, cyTop + 2);
-  ctx.lineTo(cxTop - tri, cyTop + 2 + tri);
-  ctx.lineTo(cxTop + tri, cyTop + 2 + tri);
-  ctx.closePath();
-  ctx.fill();
-
-  ctx.beginPath();
-  ctx.moveTo(cxTop, cyBot - 2);
-  ctx.lineTo(cxTop - tri, cyBot - 2 - tri);
-  ctx.lineTo(cxTop + tri, cyBot - 2 - tri);
-  ctx.closePath();
-  ctx.fill();
-  ctx.restore();
-}
-
-function mToUnits(dev: DevelopmentIn, m: number): number {
-  return m * (dev.unit_scale ?? 2);
-}
-
-function computeNodeOrigins(dev: DevelopmentIn): number[] {
-  const nodes = dev.nodes ?? [];
-  const spans = dev.spans ?? [];
-  if (!nodes.length) return [];
-
-  // Igual a regla del backend (origins): (origin[i] + a2_i) + L_i == (origin[i+1] + a1_{i+1})
-  const origins: number[] = [clampNumber(dev.x0 ?? 0, 0)];
-  for (let i = 0; i < nodes.length - 1; i++) {
-    const a2 = mToUnits(dev, clampNumber(nodes[i].a2, 0));
-    const L = mToUnits(dev, clampNumber(spans[i]?.L ?? 0, 0));
-    const a1Next = mToUnits(dev, clampNumber(nodes[i + 1].a1 ?? 0, 0));
-    origins.push(origins[i] + a2 + L - a1Next);
-  }
-  return origins;
-}
-
-function computeSpanMidX(dev: DevelopmentIn, origins: number[], spanIndex: number): number {
-  const nodes = dev.nodes ?? [];
-  const spans = dev.spans ?? [];
-  const o = origins[spanIndex] ?? 0;
-  const a2 = mToUnits(dev, clampNumber(nodes[spanIndex]?.a2 ?? 0, 0));
-  const L = mToUnits(dev, clampNumber(spans[spanIndex]?.L ?? 0, 0));
-  return o + a2 + L / 2;
-}
-
-function computeSpanRangeX(dev: DevelopmentIn, origins: number[], spanIndex: number) {
-  const nodes = dev.nodes ?? [];
-  const spans = dev.spans ?? [];
-  const o = origins[spanIndex] ?? 0;
-  const a2 = mToUnits(dev, clampNumber(nodes[spanIndex]?.a2 ?? 0, 0));
-  const L = mToUnits(dev, clampNumber(spans[spanIndex]?.L ?? 0, 0));
-  const x0 = o + a2;
-  const x1 = x0 + L;
-  return { x0: Math.min(x0, x1), x1: Math.max(x0, x1) };
-}
-
-function computeNodeMarkerX(dev: DevelopmentIn, origins: number[], nodeIndex: number): number {
-  const nodes = dev.nodes ?? [];
-  return (origins[nodeIndex] ?? 0) + mToUnits(dev, clampNumber(nodes[nodeIndex]?.b1 ?? 0, 0));
-}
-
-function computeNodeLabelX(dev: DevelopmentIn, origins: number[], nodeIndex: number): number {
-  const nodes = dev.nodes ?? [];
-  const a1 = mToUnits(dev, clampNumber(nodes[nodeIndex]?.a1 ?? 0, 0));
-  const a2 = mToUnits(dev, clampNumber(nodes[nodeIndex]?.a2 ?? 0, 0));
-  return (origins[nodeIndex] ?? 0) + (a1 + a2) / 2;
-}
-
-function steelKindLegacy(node: NodeIn, side: 'top' | 'bottom'): SteelKind {
-  const c = side === 'top' ? (node.steel_top_continuous ?? true) : (node.steel_bottom_continuous ?? true);
-  const h = side === 'top' ? (node.steel_top_hook ?? false) : (node.steel_bottom_hook ?? false);
-  const d = side === 'top' ? (node.steel_top_development ?? false) : (node.steel_bottom_development ?? false);
-  if (h) return 'hook';
-  if (d) return 'development'; // se muestra como "Anclaje"
-  return c ? 'continuous' : 'continuous';
-}
-
-function nodeSteelKind(node: NodeIn, side: 'top' | 'bottom', end: 1 | 2): SteelKind {
-  const key =
-    side === 'top'
-      ? end === 1
-        ? 'steel_top_1_kind'
-        : 'steel_top_2_kind'
-      : end === 1
-        ? 'steel_bottom_1_kind'
-        : 'steel_bottom_2_kind';
-  const v = (node as any)[key] as SteelKind | undefined;
-  if (v === 'continuous' || v === 'hook' || v === 'development') return v;
-  return steelKindLegacy(node, side);
-}
-
-function nodeToFaceEnabled(node: NodeIn, side: 'top' | 'bottom', end: 1 | 2): boolean {
-  const key =
-    side === 'top'
-      ? end === 1
-        ? 'steel_top_1_to_face'
-        : 'steel_top_2_to_face'
-      : end === 1
-        ? 'steel_bottom_1_to_face'
-        : 'steel_bottom_2_to_face';
-  return Boolean((node as any)[key]);
-}
-
-function nodeBastonLineKind(node: NodeIn, side: 'top' | 'bottom', end: 1 | 2, line: 1 | 2): SteelKind {
-  const key =
-    side === 'top'
-      ? end === 1
-        ? line === 1
-          ? 'baston_top_1_l1_kind'
-          : 'baston_top_1_l2_kind'
-        : line === 1
-          ? 'baston_top_2_l1_kind'
-          : 'baston_top_2_l2_kind'
-      : end === 1
-        ? line === 1
-          ? 'baston_bottom_1_l1_kind'
-          : 'baston_bottom_1_l2_kind'
-        : line === 1
-          ? 'baston_bottom_2_l1_kind'
-          : 'baston_bottom_2_l2_kind';
-
-  const legacyKey =
-    side === 'top'
-      ? end === 1
-        ? 'baston_top_1_kind'
-        : 'baston_top_2_kind'
-      : end === 1
-        ? 'baston_bottom_1_kind'
-        : 'baston_bottom_2_kind';
-
-  const v = ((node as any)[key] ?? (node as any)[legacyKey]) as SteelKind | undefined;
-  if (v === 'continuous' || v === 'hook' || v === 'development') return v;
-  return 'continuous';
-}
-
-function nodeBastonLineToFaceEnabled(node: NodeIn, side: 'top' | 'bottom', end: 1 | 2, line: 1 | 2): boolean {
-  const key =
-    side === 'top'
-      ? end === 1
-        ? line === 1
-          ? 'baston_top_1_l1_to_face'
-          : 'baston_top_1_l2_to_face'
-        : line === 1
-          ? 'baston_top_2_l1_to_face'
-          : 'baston_top_2_l2_to_face'
-      : end === 1
-        ? line === 1
-          ? 'baston_bottom_1_l1_to_face'
-          : 'baston_bottom_1_l2_to_face'
-        : line === 1
-          ? 'baston_bottom_2_l1_to_face'
-          : 'baston_bottom_2_l2_to_face';
-
-  const legacyKey =
-    side === 'top'
-      ? end === 1
-        ? 'baston_top_1_to_face'
-        : 'baston_top_2_to_face'
-      : end === 1
-        ? 'baston_bottom_1_to_face'
-        : 'baston_bottom_2_to_face';
-
-  return Boolean((node as any)[key] ?? (node as any)[legacyKey]);
-}
-
-type NodeSlot = { nodeIdx: number; end: 1 | 2; label: string };
-
-function buildNodeSlots(nodes: NodeIn[]): NodeSlot[] {
-  const slots: NodeSlot[] = [];
-  const n = nodes.length;
-  for (let i = 0; i < n; i++) {
-    if (i === 0) {
-      slots.push({ nodeIdx: i, end: 2, label: `Nodo ${i + 1}.2` });
-      continue;
-    }
-    if (i === n - 1) {
-      slots.push({ nodeIdx: i, end: 1, label: `Nodo ${i + 1}.1` });
-      continue;
-    }
-    slots.push({ nodeIdx: i, end: 1, label: `Nodo ${i + 1}.1` });
-    slots.push({ nodeIdx: i, end: 2, label: `Nodo ${i + 1}.2` });
-  }
-  return slots;
-}
-
-const REBAR_TABLE_CM: Record<
-  string,
-  { ldg: number; ld_inf: number; ld_sup: number }
-> = {
-  '1/2': { ldg: 28, ld_inf: 45, ld_sup: 60 },
-  '5/8': { ldg: 35, ld_inf: 60, ld_sup: 75 },
-  '3/4': { ldg: 42, ld_inf: 70, ld_sup: 90 },
-  '1': { ldg: 56, ld_inf: 115, ld_sup: 145 },
-  '1-3/8': { ldg: 77, ld_inf: 155, ld_sup: 200 },
-};
-
-function normalizeDiaKey(dia: string) {
-  const s = String(dia || '').trim().replace(/"/g, '');
-  if (s === '1 3/8' || s === '1-3/8' || s === '1-3/8\'' || s === '1-3/8in') return '1-3/8';
-  return s;
-}
-
-function lengthFromTableMeters(dia: string, kind: 'hook' | 'anchorage', side: 'top' | 'bottom') {
-  const key = normalizeDiaKey(dia);
-  const row = REBAR_TABLE_CM[key] ?? REBAR_TABLE_CM['3/4'];
-  const cm = kind === 'hook' ? row.ldg : side === 'top' ? row.ld_sup : row.ld_inf;
-  return cm / 100;
-}
-
-type StirrupToken =
-  | { kind: 'count'; count: number; spacing_m: number }
-  | { kind: 'rest'; spacing_m: number };
-
-type StirrupBlock = { key: string; positions: number[] };
-
-type StirrupsABCR = {
-  A_m: number;
-  b_n: number;
-  B_m: number;
-  c_n: number;
-  C_m: number;
-  R_m: number;
-};
-
-function formatStirrupsABCR(p: StirrupsABCR) {
-  const A = Math.max(0, p.A_m || 0);
-  const b = Math.max(0, Math.round(p.b_n || 0));
-  const B = Math.max(0, p.B_m || 0);
-  const c = Math.max(0, Math.round(p.c_n || 0));
-  const C = Math.max(0, p.C_m || 0);
-  const R = Math.max(0, p.R_m || 0);
-  return `A=${A.toFixed(2)} b,B=${b},${B.toFixed(3)} c,C=${c},${C.toFixed(3)} R=${R.toFixed(3)}`;
-}
-
-function abcrFromLegacyTokens(tokens: StirrupToken[]): StirrupsABCR | null {
-  if (!tokens.length) return null;
-  // Esperado: 1@A, N@B, rto@R   ó   1@A, rto@R
-  const t0 = tokens[0];
-  if (!t0 || t0.kind !== 'count' || Math.floor(t0.count) !== 1) return null;
-  const A_m = t0.spacing_m;
-  let idx = 1;
-  let b_n = 1;
-  let B_m = 0;
-  if (tokens[idx]?.kind === 'count') {
-    const t1 = tokens[idx] as any;
-    b_n = 1 + Math.max(0, Math.floor(t1.count));
-    B_m = Math.max(0, Number(t1.spacing_m) || 0);
-    idx++;
-  }
-  let R_m = 0;
-  for (; idx < tokens.length; idx++) {
-    const t = tokens[idx];
-    if (t.kind === 'rest') {
-      R_m = Math.max(0, Number((t as any).spacing_m) || 0);
-      break;
-    }
-  }
-  return { A_m, b_n, B_m, c_n: 0, C_m: 0, R_m };
-}
-
-const STIRRUPS_DEFAULTS_BY_H: Array<{
-  h_m: number;
-  sismico: StirrupsABCR;
-  gravedad: StirrupsABCR;
-}> = [
-  { h_m: 0.4, sismico: { A_m: 0.05, b_n: 9, B_m: 0.1, c_n: 0, C_m: 0, R_m: 0.2 }, gravedad: { A_m: 0.05, b_n: 1, B_m: 0, c_n: 0, C_m: 0, R_m: 0.2 } },
-  { h_m: 0.425, sismico: { A_m: 0.05, b_n: 9, B_m: 0.1, c_n: 0, C_m: 0, R_m: 0.2 }, gravedad: { A_m: 0.05, b_n: 1, B_m: 0, c_n: 0, C_m: 0, R_m: 0.2 } },
-  { h_m: 0.45, sismico: { A_m: 0.05, b_n: 9, B_m: 0.1, c_n: 0, C_m: 0, R_m: 0.2 }, gravedad: { A_m: 0.05, b_n: 1, B_m: 0, c_n: 0, C_m: 0, R_m: 0.2 } },
-  { h_m: 0.475, sismico: { A_m: 0.05, b_n: 9, B_m: 0.1, c_n: 0, C_m: 0, R_m: 0.2 }, gravedad: { A_m: 0.05, b_n: 1, B_m: 0, c_n: 0, C_m: 0, R_m: 0.2 } },
-  { h_m: 0.5, sismico: { A_m: 0.05, b_n: 9, B_m: 0.1, c_n: 0, C_m: 0, R_m: 0.22 }, gravedad: { A_m: 0.05, b_n: 1, B_m: 0, c_n: 0, C_m: 0, R_m: 0.22 } },
-  { h_m: 0.525, sismico: { A_m: 0.05, b_n: 9, B_m: 0.1, c_n: 0, C_m: 0, R_m: 0.225 }, gravedad: { A_m: 0.05, b_n: 1, B_m: 0, c_n: 0, C_m: 0, R_m: 0.225 } },
-  { h_m: 0.55, sismico: { A_m: 0.05, b_n: 9, B_m: 0.125, c_n: 0, C_m: 0, R_m: 0.25 }, gravedad: { A_m: 0.05, b_n: 1, B_m: 0, c_n: 0, C_m: 0, R_m: 0.25 } },
-  { h_m: 0.575, sismico: { A_m: 0.05, b_n: 10, B_m: 0.125, c_n: 0, C_m: 0, R_m: 0.25 }, gravedad: { A_m: 0.05, b_n: 1, B_m: 0, c_n: 0, C_m: 0, R_m: 0.25 } },
-  { h_m: 0.6, sismico: { A_m: 0.05, b_n: 10, B_m: 0.125, c_n: 0, C_m: 0, R_m: 0.25 }, gravedad: { A_m: 0.05, b_n: 1, B_m: 0, c_n: 0, C_m: 0, R_m: 0.25 } },
-  { h_m: 0.625, sismico: { A_m: 0.05, b_n: 10, B_m: 0.125, c_n: 0, C_m: 0, R_m: 0.25 }, gravedad: { A_m: 0.05, b_n: 1, B_m: 0, c_n: 0, C_m: 0, R_m: 0.25 } },
-  { h_m: 0.65, sismico: { A_m: 0.05, b_n: 9, B_m: 0.15, c_n: 0, C_m: 0, R_m: 0.3 }, gravedad: { A_m: 0.05, b_n: 1, B_m: 0, c_n: 0, C_m: 0, R_m: 0.3 } },
-  { h_m: 0.675, sismico: { A_m: 0.05, b_n: 10, B_m: 0.15, c_n: 0, C_m: 0, R_m: 0.3 }, gravedad: { A_m: 0.05, b_n: 1, B_m: 0, c_n: 0, C_m: 0, R_m: 0.3 } },
-  { h_m: 0.7, sismico: { A_m: 0.05, b_n: 10, B_m: 0.15, c_n: 0, C_m: 0, R_m: 0.3 }, gravedad: { A_m: 0.05, b_n: 1, B_m: 0, c_n: 0, C_m: 0, R_m: 0.3 } },
-  { h_m: 0.725, sismico: { A_m: 0.05, b_n: 10, B_m: 0.15, c_n: 0, C_m: 0, R_m: 0.3 }, gravedad: { A_m: 0.05, b_n: 1, B_m: 0, c_n: 0, C_m: 0, R_m: 0.3 } },
-  { h_m: 0.75, sismico: { A_m: 0.05, b_n: 9, B_m: 0.175, c_n: 0, C_m: 0, R_m: 0.35 }, gravedad: { A_m: 0.05, b_n: 1, B_m: 0, c_n: 0, C_m: 0, R_m: 0.35 } },
-  { h_m: 0.775, sismico: { A_m: 0.05, b_n: 10, B_m: 0.175, c_n: 0, C_m: 0, R_m: 0.35 }, gravedad: { A_m: 0.05, b_n: 1, B_m: 0, c_n: 0, C_m: 0, R_m: 0.35 } },
-  { h_m: 0.8, sismico: { A_m: 0.05, b_n: 10, B_m: 0.175, c_n: 0, C_m: 0, R_m: 0.35 }, gravedad: { A_m: 0.05, b_n: 1, B_m: 0, c_n: 0, C_m: 0, R_m: 0.35 } },
-  { h_m: 0.825, sismico: { A_m: 0.05, b_n: 10, B_m: 0.175, c_n: 0, C_m: 0, R_m: 0.35 }, gravedad: { A_m: 0.05, b_n: 1, B_m: 0, c_n: 0, C_m: 0, R_m: 0.35 } },
-  { h_m: 0.85, sismico: { A_m: 0.05, b_n: 10, B_m: 0.175, c_n: 0, C_m: 0, R_m: 0.35 }, gravedad: { A_m: 0.05, b_n: 1, B_m: 0, c_n: 0, C_m: 0, R_m: 0.35 } },
-  { h_m: 0.875, sismico: { A_m: 0.05, b_n: 11, B_m: 0.175, c_n: 0, C_m: 0, R_m: 0.35 }, gravedad: { A_m: 0.05, b_n: 1, B_m: 0, c_n: 0, C_m: 0, R_m: 0.35 } },
-  { h_m: 0.9, sismico: { A_m: 0.05, b_n: 11, B_m: 0.175, c_n: 0, C_m: 0, R_m: 0.35 }, gravedad: { A_m: 0.05, b_n: 1, B_m: 0, c_n: 0, C_m: 0, R_m: 0.35 } },
-  { h_m: 0.925, sismico: { A_m: 0.05, b_n: 11, B_m: 0.175, c_n: 0, C_m: 0, R_m: 0.35 }, gravedad: { A_m: 0.05, b_n: 1, B_m: 0, c_n: 0, C_m: 0, R_m: 0.35 } },
-  { h_m: 0.95, sismico: { A_m: 0.05, b_n: 12, B_m: 0.175, c_n: 0, C_m: 0, R_m: 0.35 }, gravedad: { A_m: 0.05, b_n: 1, B_m: 0, c_n: 0, C_m: 0, R_m: 0.35 } },
-  { h_m: 0.975, sismico: { A_m: 0.05, b_n: 12, B_m: 0.175, c_n: 0, C_m: 0, R_m: 0.35 }, gravedad: { A_m: 0.05, b_n: 1, B_m: 0, c_n: 0, C_m: 0, R_m: 0.35 } },
-  { h_m: 1.0, sismico: { A_m: 0.05, b_n: 12, B_m: 0.175, c_n: 0, C_m: 0, R_m: 0.35 }, gravedad: { A_m: 0.05, b_n: 1, B_m: 0, c_n: 0, C_m: 0, R_m: 0.35 } },
-];
-
-function pickDefaultABCRForH(h_m: number, mode: 'sismico' | 'gravedad'): StirrupsABCR {
-  const h = Number.isFinite(h_m) ? h_m : 0.5;
-  let best = STIRRUPS_DEFAULTS_BY_H[0];
-  let bestD = Infinity;
-  for (const row of STIRRUPS_DEFAULTS_BY_H) {
-    const d = Math.abs(row.h_m - h);
-    if (d < bestD) {
-      bestD = d;
-      best = row;
-    }
-  }
-  return mode === 'gravedad' ? best.gravedad : best.sismico;
-}
-
-function parseStirrupsABCR(text: string): StirrupsABCR | null {
-  const s = String(text ?? '');
-  if (!s.trim()) return null;
-
-  const num = (raw: string | undefined) => {
-    const v = Number.parseFloat(String(raw ?? '').trim().replace(',', '.'));
-    return Number.isFinite(v) ? v : NaN;
-  };
-  const int0 = (raw: string | undefined) => {
-    const v = Number.parseInt(String(raw ?? '').trim(), 10);
-    return Number.isFinite(v) ? v : 0;
-  };
-
-  const mA = s.match(/\bA\s*=\s*([0-9]+(?:[.,][0-9]+)?|\.[0-9]+)\s*m?\b/i);
-  const mR = s.match(/\bR\s*=\s*([0-9]+(?:[.,][0-9]+)?|\.[0-9]+)\s*m?\b/i);
-  const mb = s.match(/\bb\s*,\s*B\s*=\s*(\d+)\s*,\s*([0-9]+(?:[.,][0-9]+)?|\.[0-9]+)\s*m?\b/i);
-  const mc = s.match(/\bc\s*,\s*C\s*=\s*(\d+)\s*,\s*([0-9]+(?:[.,][0-9]+)?|\.[0-9]+)\s*m?\b/i);
-
-  // Heurística: si aparece alguno de los parámetros (A/b,B/c,C/R), lo tratamos como formato ABCR.
-  if (!mA && !mR && !mb && !mc) return null;
-
-  const A_m = num(mA?.[1]);
-  const R_m = num(mR?.[1]);
-  const b_n = int0(mb?.[1]);
-  const B_m = num(mb?.[2]);
-  const c_n = int0(mc?.[1]);
-  const C_m = num(mc?.[2]);
-
-  return {
-    A_m: Number.isFinite(A_m) ? Math.max(0, A_m) : 0,
-    b_n: Math.max(0, b_n),
-    B_m: Number.isFinite(B_m) ? Math.max(0, B_m) : 0,
-    c_n: Math.max(0, c_n),
-    C_m: Number.isFinite(C_m) ? Math.max(0, C_m) : 0,
-    R_m: Number.isFinite(R_m) ? Math.max(0, R_m) : 0,
-  };
-}
-
-function parseStirrupsSpec(text: string): StirrupToken[] {
-  let s = String(text ?? '');
-  if (!s.trim()) return [];
-  if (s.includes(':')) s = s.split(':', 2)[1] ?? '';
-
-  // Formato ABCR: A=0.05  b,B=8,0.10  c,C=5,0.15  R=0.25
-  // (no depende de separar por comas, porque b,B y c,C llevan coma interna)
-  const abcr = parseStirrupsABCR(s);
-  if (abcr) {
-    const out: StirrupToken[] = [];
-    if (abcr.A_m > 0) out.push({ kind: 'count', count: 1, spacing_m: abcr.A_m });
-    if (abcr.b_n > 1 && abcr.B_m > 0) out.push({ kind: 'count', count: abcr.b_n - 1, spacing_m: abcr.B_m });
-    if (abcr.c_n > 0 && abcr.C_m > 0) out.push({ kind: 'count', count: abcr.c_n, spacing_m: abcr.C_m });
-    if (abcr.R_m > 0) out.push({ kind: 'rest', spacing_m: abcr.R_m });
-    return out;
-  }
-
-  const parts = s.split(',').map((p) => p.trim()).filter(Boolean);
-
-  const out: StirrupToken[] = [];
-  for (const p0 of parts) {
-    const p = p0.replace(',', '.').trim();
-
-    // Shorthand: a single number means "rto@<spacing>".
-    // Example: ".25" => rto@.25
-    const asNumber = Number.parseFloat(p.replace(/\s*m\s*$/i, '').trim());
-    if (Number.isFinite(asNumber) && asNumber > 0 && !p.includes('@')) {
-      out.push({ kind: 'rest', spacing_m: asNumber });
-      continue;
-    }
-
-    const m = p.match(/(rto|resto|\d+)\s*@\s*(\d+\.\d+|\d+|\.\d+)/i);
-    if (!m) continue;
-    const rawCount = String(m[1] ?? '').trim().toLowerCase();
-    const spacing = Number.parseFloat(String(m[2] ?? '').trim().replace(',', '.'));
-    if (!Number.isFinite(spacing) || spacing <= 0) continue;
-    if (rawCount === 'rto' || rawCount === 'resto') {
-      out.push({ kind: 'rest', spacing_m: spacing });
-    } else {
-      const n = Number.parseInt(rawCount, 10);
-      if (!Number.isFinite(n) || n <= 0) continue;
-      out.push({ kind: 'count', count: n, spacing_m: spacing });
-    }
-  }
-  return out;
-}
-
-function stirrupsPositionsFromTokens(dev: DevelopmentIn, tokens: StirrupToken[], faceU: number, endU: number, dir: 1 | -1): number[] {
-  if (!tokens.length) return [];
-  const within = (v: number) => (dir > 0 ? v <= endU + 1e-6 : v >= endU - 1e-6);
-  let cursor = faceU;
-  const out: number[] = [];
-
-  for (const seg of tokens) {
-    const spacingU = mToUnits(dev, clampNumber((seg as any).spacing_m ?? 0, 0));
-    if (!(spacingU > 0)) continue;
-    const base = cursor + dir * spacingU;
-    if (!within(base)) {
-      // No cabe este segmento: saltar y probar el siguiente.
-      // Esto permite que R aplique aunque C no quepa, por ejemplo.
-      continue;
-    }
-
-    if (seg.kind === 'rest') {
-      const avail = Math.abs(endU - base);
-      const n = Math.floor(avail / spacingU + 1e-12) + 1;
-      for (let k = 0; k < n; k++) {
-        const v = base + dir * spacingU * k;
-        if (within(v)) out.push(v);
-      }
-      break;
-    }
-
-    const nReq = Math.max(1, Math.floor(seg.count));
-    let last = cursor;
-    for (let k = 0; k < nReq; k++) {
-      const v = base + dir * spacingU * k;
-      if (!within(v)) break;
-      out.push(v);
-      last = v;
-    }
-    cursor = last;
-  }
-
-  return out;
-}
-
-function stirrupsBlocksFromSpec(dev: DevelopmentIn, specText: string, faceU: number, endU: number, dir: 1 | -1): StirrupBlock[] {
-  const within = (v: number) => (dir > 0 ? v <= endU + 1e-6 : v >= endU - 1e-6);
-  const abcr = parseStirrupsABCR(specText);
-
-  if (abcr) {
-    const blocks: StirrupBlock[] = [];
-    let cursor = faceU;
-
-    // Bloque b: el primer estribo está a A desde la cara (incluido dentro de b).
-    const bPos: number[] = [];
-    if (abcr.A_m > 0 && abcr.b_n > 0) {
-      const A_u = mToUnits(dev, abcr.A_m);
-      const first = cursor + dir * A_u;
-      if (within(first)) {
-        bPos.push(first);
-        cursor = first;
-
-        if (abcr.b_n > 1 && abcr.B_m > 0) {
-          const B_u = mToUnits(dev, abcr.B_m);
-          for (let k = 1; k < abcr.b_n; k++) {
-            const v = first + dir * B_u * k;
-            if (!within(v)) break;
-            bPos.push(v);
-            cursor = v;
-          }
-        }
-      }
-    }
-    if (bPos.length) blocks.push({ key: 'b', positions: bPos });
-
-    // Bloque c (opcional): si no cabe el primero, se omite y se intenta R.
-    const cPos: number[] = [];
-    if (abcr.c_n > 0 && abcr.C_m > 0) {
-      const C_u = mToUnits(dev, abcr.C_m);
-      const base = cursor + dir * C_u;
-      if (within(base)) {
-        for (let k = 0; k < abcr.c_n; k++) {
-          const v = base + dir * C_u * k;
-          if (!within(v)) break;
-          cPos.push(v);
-          cursor = v;
-        }
-      }
-    }
-    if (cPos.length) blocks.push({ key: 'c', positions: cPos });
-
-    // Bloque R (resto) hacia el centro.
-    const rPos: number[] = [];
-    if (abcr.R_m > 0) {
-      const R_u = mToUnits(dev, abcr.R_m);
-      const base = cursor + dir * R_u;
-      if (within(base)) {
-        const avail = Math.abs(endU - base);
-        const n = Math.floor(avail / R_u + 1e-12) + 1;
-        for (let k = 0; k < n; k++) {
-          const v = base + dir * R_u * k;
-          if (!within(v)) break;
-          rPos.push(v);
-          cursor = v;
-        }
-      }
-    }
-    if (rPos.length) blocks.push({ key: 'r', positions: rPos });
-
-    return blocks;
-  }
-
-  // Legacy: segmentar por token para poder colorear cada bloque.
-  const tokens = parseStirrupsSpec(specText);
-  if (!tokens.length) return [];
-
-  const blocks: StirrupBlock[] = [];
-  let cursor = faceU;
-  for (let i = 0; i < tokens.length; i++) {
-    const seg = tokens[i];
-    const spacingU = mToUnits(dev, clampNumber((seg as any).spacing_m ?? 0, 0));
-    if (!(spacingU > 0)) continue;
-    const base = cursor + dir * spacingU;
-    if (!within(base)) continue;
-
-    if (seg.kind === 'rest') {
-      const positions: number[] = [];
-      const avail = Math.abs(endU - base);
-      const n = Math.floor(avail / spacingU + 1e-12) + 1;
-      for (let k = 0; k < n; k++) {
-        const v = base + dir * spacingU * k;
-        if (!within(v)) break;
-        positions.push(v);
-        cursor = v;
-      }
-      if (positions.length) blocks.push({ key: 'r', positions });
-      break;
-    }
-
-    const nReq = Math.max(1, Math.floor(seg.count));
-    const positions: number[] = [];
-    for (let k = 0; k < nReq; k++) {
-      const v = base + dir * spacingU * k;
-      if (!within(v)) break;
-      positions.push(v);
-      cursor = v;
-    }
-    if (positions.length) blocks.push({ key: `seg${i + 1}`, positions });
-  }
-
-  return blocks;
-}
-
-function stirrupsRestSpacingFromSpec(specText: string): number | null {
-  const abcr = parseStirrupsABCR(specText);
-  if (abcr && abcr.R_m > 0) return abcr.R_m;
-  const toks = parseStirrupsSpec(specText);
-  for (let i = toks.length - 1; i >= 0; i--) {
-    const t = toks[i];
-    if (t && (t as any).kind === 'rest') {
-      const r = Number((t as any).spacing_m);
-      if (Number.isFinite(r) && r > 0) return r;
-    }
-  }
-  return null;
-}
+const DEFAULT_PREF_KEY = 'beamdraw:defaultPref';
 
 function drawSteelOverlay(
   canvas: HTMLCanvasElement,
@@ -1409,13 +137,14 @@ function drawSteelOverlay(
   renderBounds: Bounds,
   recubrimientoM: number,
   hookLegM: number,
-  opts?: { showLongitudinal?: boolean; showStirrups?: boolean }
+  opts?: { showLongitudinal?: boolean; showStirrups?: boolean; yScale?: number }
 ) {
   const ctx = canvas.getContext('2d');
   if (!ctx) return;
 
   const showLongitudinal = opts?.showLongitudinal ?? true;
   const showStirrups = opts?.showStirrups ?? true;
+  const yScale = opts?.yScale ?? 1;
 
   const rect = canvas.getBoundingClientRect();
   const cssW = Math.max(1, Math.round(rect.width));
@@ -1425,7 +154,13 @@ function drawSteelOverlay(
   ctx.save();
   ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
 
-  const { toCanvas } = canvasMapper(renderBounds, cssW, cssH);
+  const { toCanvas: toCanvasBase } = canvasMapper(renderBounds, cssW, cssH);
+  const toCanvas = (x: number, y: number): [number, number] => {
+    const [cx, cy] = toCanvasBase(x, y);
+    if (yScale === 1) return [cx, cy];
+    const midY = cssH / 2;
+    return [cx, midY + (cy - midY) * yScale];
+  };
   const origins = computeNodeOrigins(dev);
   const y0 = mToUnits(dev, clampNumber((dev as any).y0 ?? 0, 0));
   const coverU = mToUnits(dev, clampNumber(recubrimientoM, 0.04));
@@ -1599,7 +334,8 @@ function drawSteelOverlay(
     dia: string,
     kind: 'hook' | 'anchorage',
     side: 'top' | 'bottom',
-    xFace?: number
+    xFace?: number,
+    customLengthM?: number
   ) {
     const c = ctx;
     if (!c) return;
@@ -1613,7 +349,11 @@ function drawSteelOverlay(
         const hi = Math.max(x, xFace);
         return Math.min(hi, Math.max(lo, target));
       }
-      return x + dir * mToUnits(dev, lengthFromTableMeters(dia, kind, side));
+      // Use custom length if provided (Preferencia 01), otherwise use table
+      const lengthM = (typeof customLengthM === 'number' && customLengthM > 0)
+        ? customLengthM
+        : lengthFromTableMeters(dia, kind, side);
+      return x + dir * mToUnits(dev, lengthM);
     })();
 
     const [cx0, cy0] = toCanvas(x, y);
@@ -2179,13 +919,13 @@ function drawSteelOverlay(
     if (topK1 === 'hook')
       drawHookOrAnchorage(xTopL, yTopL, +1, leftSpan.steel_top?.diameter ?? '3/4', 'hook', 'top', topToFace1 ? xTopR : undefined);
     if (topK1 === 'development')
-      drawHookOrAnchorage(xTopL, yTopL, +1, leftSpan.steel_top?.diameter ?? '3/4', 'anchorage', 'top', topToFace1 ? xTopR : undefined);
+      drawHookOrAnchorage(xTopL, yTopL, +1, leftSpan.steel_top?.diameter ?? '3/4', 'anchorage', 'top', topToFace1 ? xTopR : undefined, (node as any).steel_top_1_anchorage_length);
 
     // Top: N.i.2 (cara derecha) -> hacia -X, usa diámetro del tramo derecho
     if (topK2 === 'hook')
       drawHookOrAnchorage(xTopR, yTopR, -1, rightSpan.steel_top?.diameter ?? '3/4', 'hook', 'top', topToFace2 ? xTopL : undefined);
     if (topK2 === 'development')
-      drawHookOrAnchorage(xTopR, yTopR, -1, rightSpan.steel_top?.diameter ?? '3/4', 'anchorage', 'top', topToFace2 ? xTopL : undefined);
+      drawHookOrAnchorage(xTopR, yTopR, -1, rightSpan.steel_top?.diameter ?? '3/4', 'anchorage', 'top', topToFace2 ? xTopL : undefined, (node as any).steel_top_2_anchorage_length);
 
     if (botK1 === 'continuous' && botK2 === 'continuous') {
       const [cxl, cy] = toCanvas(xBotL, yBot);
@@ -2215,7 +955,8 @@ function drawSteelOverlay(
         leftSpan.steel_bottom?.diameter ?? '3/4',
         'anchorage',
         'bottom',
-        botToFace1 ? xBotR : undefined
+        botToFace1 ? xBotR : undefined,
+        (node as any).steel_bottom_1_anchorage_length
       );
 
     // Bottom: N.i.2 (cara derecha) -> hacia -X, usa diámetro del tramo derecho
@@ -2237,7 +978,8 @@ function drawSteelOverlay(
         rightSpan.steel_bottom?.diameter ?? '3/4',
         'anchorage',
         'bottom',
-        botToFace2 ? xBotL : undefined
+        botToFace2 ? xBotL : undefined,
+        (node as any).steel_bottom_2_anchorage_length
       );
   }
 
@@ -2268,7 +1010,8 @@ function drawSteelOverlay(
           s0.steel_top?.diameter ?? '3/4',
           'anchorage',
           'top',
-          topToFace ? xTopFace : undefined
+          topToFace ? xTopFace : undefined,
+          (n0 as any).steel_top_2_anchorage_length
         );
       if (kBot === 'hook')
         drawHookOrAnchorage(
@@ -2288,7 +1031,8 @@ function drawSteelOverlay(
           s0.steel_bottom?.diameter ?? '3/4',
           'anchorage',
           'bottom',
-          botToFace ? xBotFace : undefined
+          botToFace ? xBotFace : undefined,
+          (n0 as any).steel_bottom_2_anchorage_length
         );
     }
 
@@ -2319,7 +1063,8 @@ function drawSteelOverlay(
           ss.steel_top?.diameter ?? '3/4',
           'anchorage',
           'top',
-          topToFace ? xTopFace : undefined
+          topToFace ? xTopFace : undefined,
+          (nn as any).steel_top_1_anchorage_length
         );
       if (kBot === 'hook')
         drawHookOrAnchorage(
@@ -2339,7 +1084,8 @@ function drawSteelOverlay(
           ss.steel_bottom?.diameter ?? '3/4',
           'anchorage',
           'bottom',
-          botToFace ? xBotFace : undefined
+          botToFace ? xBotFace : undefined,
+          (nn as any).steel_bottom_1_anchorage_length
         );
     }
   }
@@ -2347,359 +1093,74 @@ function drawSteelOverlay(
   ctx.restore();
 }
 
-type PolyPt = [number, number];
-
-function uniqueSortedNumbers(values: number[]) {
-  const s = new Set<number>();
-  for (const v of values) {
-    if (Number.isFinite(v)) s.add(v);
-  }
-  return Array.from(s).sort((a, b) => a - b);
-}
-
-function polySliceIntervals(poly: PolyPt[], x: number): Array<[number, number]> {
-  const ys: number[] = [];
-  const n = poly.length;
-  if (n < 3) return [];
-
-  for (let i = 0; i < n; i++) {
-    const [x1, y1] = poly[i];
-    const [x2, y2] = poly[(i + 1) % n];
-    if (y1 !== y2) continue; // solo horizontales
-
-    const xmin = Math.min(x1, x2);
-    const xmax = Math.max(x1, x2);
-    // x siempre se evalúa en el centro de un intervalo (nunca en vértices), así que estricto sirve y evita duplicados.
-    if (x > xmin && x < xmax) ys.push(y1);
-  }
-
-  ys.sort((a, b) => a - b);
-  const intervals: Array<[number, number]> = [];
-  for (let i = 0; i + 1 < ys.length; i += 2) {
-    const y0 = ys[i];
-    const y1 = ys[i + 1];
-    if (Number.isFinite(y0) && Number.isFinite(y1) && y1 > y0) intervals.push([y0, y1]);
-  }
-  return intervals;
-}
-
-function spanIndexAtX(dev: DevelopmentIn, x: number) {
-  const origins = computeNodeOrigins(dev);
-  const spans = dev.spans ?? [];
-  const nodes = dev.nodes ?? [];
-  for (let i = 0; i < spans.length; i++) {
-    const a2 = mToUnits(dev, clampNumber(nodes[i]?.a2 ?? 0, 0));
-    const L = mToUnits(dev, clampNumber(spans[i]?.L ?? 0, 0));
-    const x0 = (origins[i] ?? 0) + a2;
-    const x1 = x0 + L;
-    const lo = Math.min(x0, x1);
-    const hi = Math.max(x0, x1);
-    if (x >= lo && x <= hi) return i;
-  }
-
-  // si cae fuera de tramos, el más cercano por centro
-  let best = 0;
-  let bestDist = Number.POSITIVE_INFINITY;
-  for (let i = 0; i < spans.length; i++) {
-    const mx = computeSpanMidX(dev, origins, i);
-    const d = Math.abs(x - mx);
-    if (d < bestDist) {
-      bestDist = d;
-      best = i;
-    }
-  }
-  return best;
-}
-
-function nodeIndexAtX(dev: DevelopmentIn, x: number) {
-  const origins = computeNodeOrigins(dev);
-  const nodes = dev.nodes ?? [];
-  for (let i = 0; i < nodes.length; i++) {
-    const relA1 = mToUnits(dev, clampNumber(nodes[i]?.a1 ?? 0, 0));
-    const relA2 = mToUnits(dev, clampNumber(nodes[i]?.a2 ?? 0, 0));
-    const relB1 = mToUnits(dev, clampNumber(nodes[i]?.b1 ?? 0, 0));
-    const relB2 = mToUnits(dev, clampNumber(nodes[i]?.b2 ?? 0, 0));
-    const relMin = Math.min(relA1, relA2, relB1, relB2);
-    const relMax = Math.max(relA1, relA2, relB1, relB2);
-    const lo = (origins[i] ?? 0) + relMin;
-    const hi = (origins[i] ?? 0) + relMax;
-    if (x >= lo && x <= hi) return i;
-  }
-  return -1;
-}
-
-function spanBAtX(dev: DevelopmentIn, x: number) {
-  const spans = dev.spans ?? [];
-  if (!spans.length) return 1;
-  const i = spanIndexAtX(dev, x);
-  const b = clampNumber((spans[i] as any)?.b ?? 0.3, 0.3);
-  return Math.max(1e-6, mToUnits(dev, b));
-}
-
-function setEmissiveOnObject(obj: THREE.Object3D, color: number, intensity: number) {
-  obj.traverse((child: THREE.Object3D) => {
-    const mesh = child as THREE.Mesh;
-    const mat = mesh.material as any;
-    const apply = (m: any) => {
-      if (!m) return;
-      if (m.emissive) m.emissive = new THREE.Color(color);
-      if (typeof m.emissiveIntensity === 'number') m.emissiveIntensity = intensity;
-    };
-    if (Array.isArray(mat)) mat.forEach(apply);
-    else apply(mat);
-  });
-}
-
-function disposeObject3D(obj: THREE.Object3D) {
-  obj.traverse((child: THREE.Object3D) => {
-    const mesh = child as THREE.Mesh;
-    if (mesh.geometry) mesh.geometry.dispose?.();
-    const mat = mesh.material as any;
-    if (Array.isArray(mat)) mat.forEach((m) => m?.dispose?.());
-    else mat?.dispose?.();
-  });
-}
-
-const ORTHO_FRUSTUM_SIZE = 220;
-
-function setOrthoFrustum(camera: THREE.OrthographicCamera, aspect: number) {
-  const a = Number.isFinite(aspect) && aspect > 1e-6 ? aspect : 1;
-  camera.left = (-ORTHO_FRUSTUM_SIZE * a) / 2;
-  camera.right = (ORTHO_FRUSTUM_SIZE * a) / 2;
-  camera.top = ORTHO_FRUSTUM_SIZE / 2;
-  camera.bottom = -ORTHO_FRUSTUM_SIZE / 2;
-}
-
-function fitCameraToObject(
-  camera: THREE.PerspectiveCamera | THREE.OrthographicCamera,
-  controls: OrbitControls,
-  object: THREE.Object3D,
-  viewport?: { w: number; h: number }
+function drawCrossbeamsOverlay(
+  canvas: HTMLCanvasElement,
+  dev: DevelopmentIn,
+  renderBounds: Bounds,
+  opts?: { yScale?: number }
 ) {
-  const box = new THREE.Box3().setFromObject(object);
-  if (!Number.isFinite(box.min.x) || !Number.isFinite(box.max.x)) return;
-
-  const size = new THREE.Vector3();
-  box.getSize(size);
-  const center = new THREE.Vector3();
-  box.getCenter(center);
-
-  const maxSize = Math.max(size.x, size.y, size.z, 1);
-
-  controls.target.copy(center);
-
-  if ((camera as any).isPerspectiveCamera) {
-    const cam = camera as THREE.PerspectiveCamera;
-    const fitHeightDistance = maxSize / (2 * Math.tan((cam.fov * Math.PI) / 360));
-    const fitWidthDistance = fitHeightDistance / (cam.aspect || 1);
-    const distance = 1.2 * Math.max(fitHeightDistance, fitWidthDistance);
-
-    cam.position.set(center.x + distance, center.y + distance * 0.6, center.z + distance);
-    cam.near = Math.max(0.01, distance / 2000);
-    cam.far = Math.max(2000, distance * 40);
-    cam.updateProjectionMatrix();
-
-    // Permitir mucho más zoom-in.
-    controls.minDistance = 0.01;
-    controls.maxDistance = Math.max(50, distance * 40);
-  } else {
-    const cam = camera as THREE.OrthographicCamera;
-    const w = viewport?.w ?? 1;
-    const h = viewport?.h ?? 1;
-    const aspect = w / Math.max(1, h);
-
-    setOrthoFrustum(cam, aspect);
-
-    const distance = 2.2 * maxSize;
-    const dir = new THREE.Vector3(1, 0.6, 1).normalize();
-    cam.position.copy(center.clone().add(dir.multiplyScalar(distance)));
-    cam.near = Math.max(0.01, distance / 2000);
-    cam.far = Math.max(2000, distance * 40);
-    cam.lookAt(center);
-    cam.updateMatrixWorld(true);
-
-    // Ajustar zoom para encuadrar el bounding box proyectado en cámara.
-    const corners = [
-      new THREE.Vector3(box.min.x, box.min.y, box.min.z),
-      new THREE.Vector3(box.min.x, box.min.y, box.max.z),
-      new THREE.Vector3(box.min.x, box.max.y, box.min.z),
-      new THREE.Vector3(box.min.x, box.max.y, box.max.z),
-      new THREE.Vector3(box.max.x, box.min.y, box.min.z),
-      new THREE.Vector3(box.max.x, box.min.y, box.max.z),
-      new THREE.Vector3(box.max.x, box.max.y, box.min.z),
-      new THREE.Vector3(box.max.x, box.max.y, box.max.z),
-    ];
-
-    const inv = cam.matrixWorldInverse.clone();
-    let minX = Number.POSITIVE_INFINITY;
-    let maxX = Number.NEGATIVE_INFINITY;
-    let minY = Number.POSITIVE_INFINITY;
-    let maxY = Number.NEGATIVE_INFINITY;
-    for (const p of corners) {
-      p.applyMatrix4(inv);
-      minX = Math.min(minX, p.x);
-      maxX = Math.max(maxX, p.x);
-      minY = Math.min(minY, p.y);
-      maxY = Math.max(maxY, p.y);
-    }
-
-    const boxW = Math.max(1e-6, maxX - minX);
-    const boxH = Math.max(1e-6, maxY - minY);
-    const viewW = ORTHO_FRUSTUM_SIZE * aspect;
-    const viewH = ORTHO_FRUSTUM_SIZE;
-    const zoomFit = 0.90 * Math.min(viewW / boxW, viewH / boxH);
-    cam.zoom = Math.min(200, Math.max(0.01, zoomFit));
-    cam.updateProjectionMatrix();
-
-    // Límites de zoom para ortográfica.
-    (controls as any).minZoom = 0.01;
-    (controls as any).maxZoom = 200;
-  }
-
-  controls.update();
-}
-
-function computeZoomBounds(dev: DevelopmentIn, preview: PreviewResponse, sel: Selection): Bounds | null {
-  if (!preview || sel.kind === 'none') return null;
-  const full = preview.bounds as Bounds;
-  const dx = Math.max(full.max_x - full.min_x, 1e-6);
-  const padX = dx * 0.05;
-
-  const origins = computeNodeOrigins(dev);
-
-  if (sel.kind === 'node') {
-    const x = computeNodeMarkerX(dev, origins, sel.index);
-    const half = Math.max(dx * 0.12, 1);
-    return clampBounds(
-      { min_x: x - half - padX, max_x: x + half + padX, min_y: full.min_y, max_y: full.max_y },
-      full
-    );
-  }
-
-  const r = computeSpanRangeX(dev, origins, sel.index);
-  const half = Math.max((r.x1 - r.x0) / 2 + dx * 0.06, dx * 0.12);
-  const mid = (r.x0 + r.x1) / 2;
-  return clampBounds(
-    { min_x: mid - half - padX, max_x: mid + half + padX, min_y: full.min_y, max_y: full.max_y },
-    full
-  );
-}
-
-function drawSelectionOverlay(canvas: HTMLCanvasElement, preview: PreviewResponse, dev: DevelopmentIn, sel: Selection, renderBounds: Bounds) {
-  if (sel.kind === 'none') return;
   const ctx = canvas.getContext('2d');
   if (!ctx) return;
+
+  const crossbeams = (dev as any).crossbeams || [];
+  if (crossbeams.length === 0) return;
+
+  const yScale = opts?.yScale ?? 1;
 
   const rect = canvas.getBoundingClientRect();
   const cssW = Math.max(1, Math.round(rect.width));
   const cssH = Math.max(1, Math.round(rect.height));
-
-  const origins = computeNodeOrigins(dev);
-  const { toCanvas } = canvasMapper(renderBounds, cssW, cssH);
+  const dpr = Math.min(window.devicePixelRatio || 1, 2);
 
   ctx.save();
-  ctx.globalCompositeOperation = 'source-over';
-
-  if (sel.kind === 'node') {
-    const x = computeNodeMarkerX(dev, origins, sel.index);
-    const [cx0] = toCanvas(x, renderBounds.max_y);
-    const [cx1] = toCanvas(x, renderBounds.min_y);
-    const xpx = Math.round(cx0) + 0.5;
-    ctx.strokeStyle = 'rgba(250, 204, 21, 0.55)';
-    ctx.lineWidth = 4;
-    ctx.beginPath();
-    ctx.moveTo(xpx, 8);
-    ctx.lineTo(xpx, cssH - 8);
-    ctx.stroke();
-  } else {
-    const r = computeSpanRangeX(dev, origins, sel.index);
-    const [x0] = toCanvas(r.x0, renderBounds.max_y);
-    const [x1] = toCanvas(r.x1, renderBounds.max_y);
-    const left = Math.min(x0, x1);
-    const right = Math.max(x0, x1);
-    ctx.fillStyle = 'rgba(250, 204, 21, 0.12)';
-    ctx.strokeStyle = 'rgba(250, 204, 21, 0.35)';
-    ctx.lineWidth = 2;
-    ctx.fillRect(left, 6, Math.max(1, right - left), cssH - 12);
-    ctx.strokeRect(left, 6, Math.max(1, right - left), cssH - 12);
-  }
-
-  ctx.restore();
-}
-
-function drawLabels(canvas: HTMLCanvasElement, data: PreviewResponse, dev: DevelopmentIn, renderBounds: Bounds) {
-  const ctx = canvas.getContext('2d');
-  if (!ctx) return;
-
-  const dpr = window.devicePixelRatio || 1;
-  const rect = canvas.getBoundingClientRect();
-  const cssW = Math.max(1, Math.round(rect.width));
-  const cssH = Math.max(1, Math.round(rect.height));
   ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
 
-  const nodes = dev.nodes ?? [];
-  const origins = computeNodeOrigins(dev);
-  const { toCanvas } = canvasMapper(renderBounds, cssW, cssH);
+  const { toCanvas: toCanvasBase } = canvasMapper(renderBounds, cssW, cssH);
+  const toCanvas = (x: number, y: number): [number, number] => {
+    const [cx, cy] = toCanvasBase(x, y);
+    if (yScale === 1) return [cx, cy];
+    const midY = cssH / 2;
+    return [cx, midY + (cy - midY) * yScale];
+  };
 
-  ctx.save();
-  ctx.font = '12px ui-monospace, Menlo, Consolas, monospace';
-  ctx.textAlign = 'center';
-  ctx.textBaseline = 'middle';
+  const y0 = mToUnits(dev, (dev as any).y0 ?? 0);
 
-  // Etiquetas N/T abajo, separadas del contorno
-  const [, yBotPx0] = toCanvas(renderBounds.min_x, renderBounds.min_y);
-  const yLabelPx = Math.min(cssH - 14, Math.round(yBotPx0) + 26);
+  ctx.strokeStyle = 'rgba(139, 92, 246, 0.8)';  // Purple
+  ctx.fillStyle = 'rgba(139, 92, 246, 0.15)';    // Light purple fill
+  ctx.lineWidth = 2;
 
-  // Nodos (marca + punto + etiqueta)
-  ctx.strokeStyle = 'rgba(250, 204, 21, 0.95)';
-  ctx.lineWidth = 1;
-  const tickLen = 22;
-  const dotR = 3;
-  for (let i = 0; i < origins.length; i++) {
-    // En el contorno, el cap superior usa x=b1 y x=b2 (ver backend). Si b1=0, coincide con el quiebre vertical.
-    const x = computeNodeMarkerX(dev, origins, i);
-    const [txTop, tyTop] = toCanvas(x, renderBounds.max_y);
-    // Marca corta (evita confundir con la sección)
-    const xpx = Math.round(txTop) + 0.5;
-    const ypx = Math.round(tyTop) + 0.5;
-    ctx.beginPath();
-    ctx.moveTo(xpx, ypx);
-    ctx.lineTo(xpx, ypx + tickLen);
-    ctx.stroke();
+  for (const cb of crossbeams) {
+    try {
+      const x_u = mToUnits(dev, cb.x);
+      const b_u = mToUnits(dev, cb.b);
+      const h_u = mToUnits(dev, cb.h);
 
-    // Punto del nodo
-    ctx.fillStyle = 'rgba(250, 204, 21, 0.95)';
-    ctx.beginPath();
-    ctx.arc(Math.round(txTop) + 0.5, Math.round(tyTop) + 0.5, dotR, 0, Math.PI * 2);
-    ctx.fill();
+      // El ancho se extiende en dirección Y (perpendicular al desarrollo)
+      const half_b = b_u / 2.0;
+      const y_bottom = y0;
+      const y_top = y0 + h_u;
 
-    // Etiqueta
-    const xLabel = computeNodeLabelX(dev, origins, i);
-    const [txLabel] = toCanvas(xLabel, renderBounds.max_y);
-    ctx.fillStyle = 'rgba(250, 204, 21, 0.95)';
-    ctx.fillText(`N${i + 1}`, txLabel, yLabelPx);
-  }
+      // Cuatro esquinas del rectángulo
+      const [px1, py1] = toCanvas(x_u, y_bottom - half_b);
+      const [px2, py2] = toCanvas(x_u, y_top - half_b);
+      const [px3, py3] = toCanvas(x_u, y_top + half_b);
+      const [px4, py4] = toCanvas(x_u, y_bottom + half_b);
 
-  // Tramos (etiqueta)
-  ctx.fillStyle = 'rgba(147, 197, 253, 0.95)';
-  for (let i = 0; i < (dev.spans ?? []).length; i++) {
-    const mx = computeSpanMidX(dev, origins, i);
-    const [tx] = toCanvas(mx, renderBounds.max_y);
-    ctx.fillText(`T${i + 1}`, tx, yLabelPx);
+      // Dibujar rectángulo
+      ctx.beginPath();
+      ctx.moveTo(px1, py1);
+      ctx.lineTo(px2, py2);
+      ctx.lineTo(px3, py3);
+      ctx.lineTo(px4, py4);
+      ctx.closePath();
+      ctx.fill();
+      ctx.stroke();
+    } catch (e) {
+      console.warn('Error dibujando viga transversal en 2D:', e);
+    }
   }
 
   ctx.restore();
-}
-
-function downloadBlob(blob: Blob, filename: string) {
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement('a');
-  a.href = url;
-  a.download = filename;
-  document.body.appendChild(a);
-  a.click();
-  a.remove();
-  URL.revokeObjectURL(url);
 }
 
 export default function App() {
@@ -2707,10 +1168,20 @@ export default function App() {
   const [previewView, setPreviewView] = useState<PreviewView>('2d');
   const [showLongitudinal, setShowLongitudinal] = useState(true);
   const [showStirrups, setShowStirrups] = useState(true);
+  const [steelYScale2, setSteelYScale2] = useState(false);
+  const [steelViewPinned, setSteelViewPinned] = useState(false);
   const [selection, setSelection] = useState<Selection>({ kind: 'none' });
-  const [viewport, setViewport] = useState<Bounds | null>(null);
+  const [detailViewport, setDetailViewport] = useState<Bounds | null>(null);
   const tabRef = useRef<Tab>(tab);
-  const viewportRef = useRef<Bounds | null>(viewport);
+  const detailViewportRef = useRef<Bounds | null>(detailViewport);
+
+  const steelViewActive = tab === 'acero' || steelViewPinned;
+
+  useEffect(() => {
+    // Una vez que el usuario entra a Acero, mantener esa vista activa aunque cambie
+    // el tab del editor (Config/Concreto/JSON).
+    if (tab === 'acero') setSteelViewPinned(true);
+  }, [tab]);
 
   const [appCfg, setAppCfg] = useState<AppConfig>(DEFAULT_APP_CFG);
   const [dev, setDev] = useState<DevelopmentIn>(() => defaultDevelopment(DEFAULT_APP_CFG));
@@ -2728,11 +1199,21 @@ export default function App() {
   const [saveStatus, setSaveStatus] = useState<'saved' | 'saving' | 'error' | null>(null);
   const [concretoLocked, setConcretoLocked] = useState(false);
 
+  const [defaultPref, setDefaultPref] = useState<DefaultPreferenceId>(() => {
+    const saved = safeGetLocalStorage(DEFAULT_PREF_KEY);
+    const pref = parseDefaultPref(saved);
+    // Si no había nada guardado, guardar 'basico' como predeterminado
+    if (!saved) {
+      safeSetLocalStorage(DEFAULT_PREF_KEY, 'basico');
+    }
+    return pref;
+  });
+  const [editorOpen, setEditorOpen] = useState(false);
+
   // Config global desde backend (fuente de verdad)
   const [backendCfg, setBackendCfg] = useState<BackendAppConfig | null>(null);
   const hookLegM = backendCfg?.hook_leg_m ?? 0.15;
   const [hookLegDraft, setHookLegDraft] = useState<string>('0.15');
-  const hookLegSaveSeqRef = useRef(0);
 
   const [steelTextLayerDraft, setSteelTextLayerDraft] = useState<string>('');
   const [steelTextStyleDraft, setSteelTextStyleDraft] = useState<string>('');
@@ -2740,17 +1221,15 @@ export default function App() {
   const [steelTextWidthDraft, setSteelTextWidthDraft] = useState<string>('');
   const [steelTextObliqueDraft, setSteelTextObliqueDraft] = useState<string>('');
   const [steelTextRotationDraft, setSteelTextRotationDraft] = useState<string>('');
-  const steelTextSaveSeqRef = useRef(0);
 
   // Proyección de losa (config backend)
   const [slabProjOffsetDraft, setSlabProjOffsetDraft] = useState<string>('0.20');
-  const [slabProjLayerDraft, setSlabProjLayerDraft] = useState<string>('');
-  const slabProjSaveSeqRef = useRef(0);
+  const [slabProjLayerDraft, setSlabProjLayerDraft] = useState<string>('-- SECCION CORTE');
 
   const [templateName, setTemplateName] = useState<string | null>(null);
   const [templateLayers, setTemplateLayers] = useState<string[]>([]);
-  const [cascoLayer, setCascoLayer] = useState<string>('A-BEAM-CASCO');
-  const [steelLayer, setSteelLayer] = useState<string>('A-REBAR-CORRIDO');
+  const [cascoLayer, setCascoLayer] = useState<string>('-- SECCION CORTE');
+  const [steelLayer, setSteelLayer] = useState<string>('FIERRO');
   const [drawSteel, setDrawSteel] = useState<boolean>(true);
 
   // Sección (verificación a lo largo del desarrollo)
@@ -2771,22 +1250,145 @@ export default function App() {
   const fmt2 = (v: number) => (Number.isFinite(v) ? v.toFixed(2) : '');
 
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
+  const overviewCanvasRef = useRef<HTMLCanvasElement | null>(null);
   const previewDrawRafRef = useRef<number | null>(null);
   const previewOverlayRafRef = useRef<number | null>(null);
   const [previewCanvasResizeTick, setPreviewCanvasResizeTick] = useState(0);
 
+  const overviewPreviewDrawRafRef = useRef<number | null>(null);
+  const overviewPreviewOverlayRafRef = useRef<number | null>(null);
+  const [overviewCanvasResizeTick, setOverviewCanvasResizeTick] = useState(0);
+
   const threeHostRef = useRef<HTMLDivElement | null>(null);
   const threeRef = useRef<ThreeSceneState | null>(null);
+  const threeOverviewHostRef = useRef<HTMLDivElement | null>(null);
+  const threeOverviewRef = useRef<ThreeSceneState | null>(null);
   const [threeProjection, setThreeProjection] = useState<ThreeProjection>('perspective');
-  const dxfInputRef = useRef<HTMLInputElement | null>(null);
-  const templateInputRef = useRef<HTMLInputElement | null>(null);
 
   const spansCols = (dev.spans ?? []).length;
   const nodesCols = (dev.nodes ?? []).length;
 
   useEffect(() => {
-    viewportRef.current = viewport;
-  }, [viewport]);
+    safeSetLocalStorage(DEFAULT_PREF_KEY, defaultPref);
+  }, [defaultPref]);
+
+  const applyBasicoPreference = () => {
+    // Verificar si hay geometría existente ANTES de modificar cualquier estado
+    const hasExistingGeometry = (dev.nodes ?? []).length > 0 || (dev.spans ?? []).length > 0;
+
+    if (!hasExistingGeometry) {
+      // Si NO hay geometría existente, configurar parámetros por defecto
+      setAppCfg((p) => ({
+        ...p,
+        d: 0.25,
+        unit_scale: 2,
+        x0: 0,
+        y0: 0,
+        recubrimiento: 0.04,
+        baston_Lc: 0.45,
+      }));
+      setHookLegDraft('0.15');
+      setSlabProjOffsetDraft('0.20');
+      setSlabProjLayerDraft('-- SECCION CORTE');
+      setCascoLayer('-- SECCION CORTE');
+      setSteelLayer('FIERRO');
+      // No hay geometría, salir
+      return;
+    }
+
+    // Si hay geometría existente, SOLO actualizar configuración de acero
+    // NO modificar appCfg para preservar la geometría
+    setDev((prev) => {
+      const currentNodes = prev.nodes ?? [];
+      const currentSpans = prev.spans ?? [];
+      if (currentNodes.length === 0) return prev;
+
+      // Aplicar configuración a nodos (ganchos, anclajes 75cm/60cm)
+      const updatedNodes = applyBasicPreferenceToNodes([...currentNodes]);
+
+      // Aplicar configuración a spans (acero corrido 2Ø5/8")
+      const updatedSpans = applyBasicPreferenceToSpans([...currentSpans]);
+
+      console.log('✓ Preferencia 01: Básico aplicada a', updatedNodes.length, 'nodos y', updatedSpans.length, 'tramos (geometría preservada)');
+
+      // Retornar sin normalizar para no afectar la geometría
+      return { ...prev, nodes: updatedNodes, spans: updatedSpans };
+    });
+  };
+
+  const applyPersonalizadoPreference = (p: PersonalizadoPayloadV1 | null) => {
+    if (!p) return;
+
+    // Verificar si hay geometría existente
+    const hasExistingGeometry = (dev.nodes ?? []).length > 0 || (dev.spans ?? []).length > 0;
+
+    if (hasExistingGeometry) {
+      // Si hay geometría existente, SOLO aplicar parámetros que NO afectan la geometría
+      // Preservar d, unit_scale, x0, y0 para mantener la geometría intacta
+      setAppCfg((prev) => ({
+        ...prev,
+        // NO cambiar: d, unit_scale, x0, y0 (preservan geometría)
+        recubrimiento: p.appCfg.recubrimiento,
+        baston_Lc: p.appCfg.baston_Lc,
+      }));
+      console.log('✓ Preferencia Personalizado aplicada (geometría preservada, solo parámetros de dibujo actualizados)');
+    } else {
+      // Si NO hay geometría, aplicar toda la configuración
+      setAppCfg(p.appCfg);
+      setDev(normalizeDev(p.dev, p.appCfg));
+      console.log('✓ Preferencia Personalizado aplicada (geometría cargada desde guardado)');
+    }
+
+    // Aplicar drafts y exportOpts (no afectan geometría)
+    setHookLegDraft(p.drafts.hookLegDraft);
+    setSteelTextLayerDraft(p.drafts.steelTextLayerDraft);
+    setSteelTextStyleDraft(p.drafts.steelTextStyleDraft);
+    setSteelTextHeightDraft(p.drafts.steelTextHeightDraft);
+    setSteelTextWidthDraft(p.drafts.steelTextWidthDraft);
+    setSteelTextObliqueDraft(p.drafts.steelTextObliqueDraft);
+    setSteelTextRotationDraft(p.drafts.steelTextRotationDraft);
+    setSlabProjOffsetDraft(p.drafts.slabProjOffsetDraft);
+    setSlabProjLayerDraft(p.drafts.slabProjLayerDraft);
+    setCascoLayer(p.exportOpts.cascoLayer);
+    setSteelLayer(p.exportOpts.steelLayer);
+    setDrawSteel(p.exportOpts.drawSteel);
+  };
+
+  const onChangeDefaultPref = (next: DefaultPreferenceId) => {
+    setDefaultPref(next);
+    if (next === 'basico') {
+      applyBasicoPreference();
+      return;
+    }
+    const stored = readPersonalizado();
+    if (stored) {
+      applyPersonalizadoPreference(stored);
+      return;
+    }
+    // Sembrar con el estado actual como “Personalizado” (sin botones extra).
+    const seed: PersonalizadoPayloadV1 = {
+      v: 1,
+      appCfg,
+      dev,
+      exportOpts: { cascoLayer, steelLayer, drawSteel },
+      drafts: {
+        hookLegDraft,
+        steelTextLayerDraft,
+        steelTextStyleDraft,
+        steelTextHeightDraft,
+        steelTextWidthDraft,
+        steelTextObliqueDraft,
+        steelTextRotationDraft,
+        slabProjOffsetDraft,
+        slabProjLayerDraft,
+      },
+    };
+    safeSetLocalStorage(PERSONALIZADO_KEY, JSON.stringify(seed));
+  };
+
+  useEffect(() => {
+    detailViewportRef.current = detailViewport;
+  }, [detailViewport]);
 
   // Asegurar redraw 2D cuando el canvas cambia de tamaño (evita “se queda en blanco” al cambiar tab/layout).
   useEffect(() => {
@@ -2796,6 +1398,22 @@ export default function App() {
     const ro = new ResizeObserver(() => {
       if (raf) window.cancelAnimationFrame(raf);
       raf = window.requestAnimationFrame(() => setPreviewCanvasResizeTick((t) => t + 1));
+    });
+    ro.observe(canvas);
+    return () => {
+      if (raf) window.cancelAnimationFrame(raf);
+      ro.disconnect();
+    };
+  }, []);
+
+  // Redraw overview 2D cuando cambia su tamaño.
+  useEffect(() => {
+    const canvas = overviewCanvasRef.current;
+    if (!canvas) return;
+    let raf = 0;
+    const ro = new ResizeObserver(() => {
+      if (raf) window.cancelAnimationFrame(raf);
+      raf = window.requestAnimationFrame(() => setOverviewCanvasResizeTick((t) => t + 1));
     });
     ro.observe(canvas);
     return () => {
@@ -2857,6 +1475,11 @@ export default function App() {
     tabRef.current = tab;
   }, [tab]);
 
+  // Por defecto, los contenedores de parámetros quedan cerrados.
+  useEffect(() => {
+    setEditorOpen(false);
+  }, [tab]);
+
   // Mantener dev sincronizado con config general
   useEffect(() => {
     setDev((prev) => normalizeDev(prev, appCfg));
@@ -2897,10 +1520,12 @@ export default function App() {
   useEffect(() => {
     let cancelled = false;
     (async () => {
+      let loaded = false;
       try {
         const stored = await fetchState();
         if (cancelled) return;
         if (stored?.developments?.length) {
+          loaded = true;
           const incoming = stored.developments[0];
           const nextCfg: AppConfig = {
             d: clampNumber(incoming.d ?? DEFAULT_APP_CFG.d, DEFAULT_APP_CFG.d),
@@ -2920,11 +1545,34 @@ export default function App() {
             ),
           };
           setAppCfg(nextCfg);
-          setDev(normalizeDev(incoming, nextCfg));
+
+          // Aplicar Preferencia 01 ANTES de normalizar si la preferencia es 'basico'
+          let finalIncoming = incoming;
+          if (defaultPref === 'basico') {
+            console.log('📋 Aplicando Preferencia 01: Básico a viga cargada...');
+            const updatedNodes = incoming.nodes && incoming.nodes.length > 0
+              ? applyBasicPreferenceToNodes([...incoming.nodes])
+              : incoming.nodes;
+            const updatedSpans = incoming.spans && incoming.spans.length > 0
+              ? applyBasicPreferenceToSpans([...incoming.spans])
+              : incoming.spans;
+            finalIncoming = { ...incoming, nodes: updatedNodes, spans: updatedSpans };
+          }
+
+          setDev(normalizeDev(finalIncoming, nextCfg));
           setJsonText(toJson(stored));
         }
       } catch {
         // ignore
+      } finally {
+        if (cancelled) return;
+        if (loaded) return;
+        // Si no hay estado persistido, aplicar preferencia por defecto.
+        if (defaultPref === 'basico') {
+          applyBasicoPreference();
+        } else {
+          applyPersonalizadoPreference(readPersonalizado());
+        }
       }
     })();
 
@@ -2932,6 +1580,50 @@ export default function App() {
       cancelled = true;
     };
   }, []);
+
+  // Auto-guardar preferencia “Personalizado” (debounced) para usarla como default.
+  useEffect(() => {
+    if (defaultPref !== 'personalizado') return;
+
+    const t = window.setTimeout(() => {
+      const out: PersonalizadoPayloadV1 = {
+        v: 1,
+        appCfg,
+        dev,
+        exportOpts: { cascoLayer, steelLayer, drawSteel },
+        drafts: {
+          hookLegDraft,
+          steelTextLayerDraft,
+          steelTextStyleDraft,
+          steelTextHeightDraft,
+          steelTextWidthDraft,
+          steelTextObliqueDraft,
+          steelTextRotationDraft,
+          slabProjOffsetDraft,
+          slabProjLayerDraft,
+        },
+      };
+      safeSetLocalStorage(PERSONALIZADO_KEY, JSON.stringify(out));
+    }, 600);
+
+    return () => window.clearTimeout(t);
+  }, [
+    defaultPref,
+    appCfg,
+    dev,
+    cascoLayer,
+    steelLayer,
+    drawSteel,
+    hookLegDraft,
+    steelTextLayerDraft,
+    steelTextStyleDraft,
+    steelTextHeightDraft,
+    steelTextWidthDraft,
+    steelTextObliqueDraft,
+    steelTextRotationDraft,
+    slabProjOffsetDraft,
+    slabProjLayerDraft,
+  ]);
 
   // Intentar cargar info de plantilla si ya existe en backend.
   useEffect(() => {
@@ -2990,6 +1682,7 @@ export default function App() {
 
   // Sync drafts desde backend (vacío = null => usar plantilla)
   useEffect(() => {
+    if (!backendCfg) return;
     setSteelTextLayerDraft(String(backendCfg?.steel_text_layer ?? ''));
     setSteelTextStyleDraft(String(backendCfg?.steel_text_style ?? ''));
     setSteelTextHeightDraft(backendCfg?.steel_text_height == null ? '' : String(backendCfg.steel_text_height));
@@ -3012,113 +1705,92 @@ export default function App() {
   ]);
 
   // Autosave (debounced) al modificar L6 gancho en Config.
-  useEffect(() => {
-    if (!backendCfg) return;
-    const current = backendCfg.hook_leg_m;
-    const next = clampNumber(hookLegDraft, current ?? 0.15);
-    if (!Number.isFinite(next) || !Number.isFinite(current)) return;
-    if (Math.abs(next - current) < 1e-9) return;
+  useDebounce(
+    hookLegDraft,
+    500,
+    async (draft) => {
+      if (!backendCfg) return;
+      const current = backendCfg.hook_leg_m;
+      const next = clampNumber(draft, current ?? 0.15);
+      if (!Number.isFinite(next) || !Number.isFinite(current)) return;
+      if (Math.abs(next - current) < 1e-9) return;
 
-    const seq = ++hookLegSaveSeqRef.current;
-    const t = window.setTimeout(async () => {
-      try {
-        const cfg = await updateConfig({ hook_leg_m: next });
-        // Evitar condiciones de carrera si el usuario siguió editando.
-        if (hookLegSaveSeqRef.current !== seq) return;
-        setBackendCfg(cfg);
-      } catch (e) {
-        // Silencioso por requisito (sin botón ni mensajes); dejar rastro en consola.
-        console.warn('No se pudo guardar hook_leg_m', e);
-      }
-    }, 500);
-
-    return () => window.clearTimeout(t);
-  }, [hookLegDraft, backendCfg]);
+      const cfg = await updateConfig({ hook_leg_m: next });
+      setBackendCfg(cfg);
+    }
+  );
 
   // Autosave (debounced) al modificar formato de texto de acero.
-  useEffect(() => {
-    if (!backendCfg) return;
+  useDebounce(
+    {
+      layer: steelTextLayerDraft,
+      style: steelTextStyleDraft,
+      height: steelTextHeightDraft,
+      width: steelTextWidthDraft,
+      oblique: steelTextObliqueDraft,
+      rotation: steelTextRotationDraft,
+    },
+    500,
+    async (drafts) => {
+      if (!backendCfg) return;
 
-    const normText = (v: string) => {
-      const s = String(v ?? '').trim();
-      return s ? s : null;
-    };
-    const normNum = (v: string) => {
-      const n = Number.parseFloat(String(v ?? '').trim());
-      return Number.isFinite(n) ? n : null;
-    };
+      const normText = (v: string) => {
+        const s = String(v ?? '').trim();
+        return s ? s : null;
+      };
+      const normNum = (v: string) => {
+        const n = Number.parseFloat(String(v ?? '').trim());
+        return Number.isFinite(n) ? n : null;
+      };
 
-    const patch: Partial<BackendAppConfig> = {};
-    const nextLayer = normText(steelTextLayerDraft);
-    const nextStyle = normText(steelTextStyleDraft);
-    const nextHeight = normNum(steelTextHeightDraft);
-    const nextWidth = normNum(steelTextWidthDraft);
-    const nextOblique = normNum(steelTextObliqueDraft);
-    const nextRotation = normNum(steelTextRotationDraft);
+      const patch: Partial<BackendAppConfig> = {};
+      const nextLayer = normText(drafts.layer);
+      const nextStyle = normText(drafts.style);
+      const nextHeight = normNum(drafts.height);
+      const nextWidth = normNum(drafts.width);
+      const nextOblique = normNum(drafts.oblique);
+      const nextRotation = normNum(drafts.rotation);
 
-    if ((backendCfg.steel_text_layer ?? null) !== nextLayer) patch.steel_text_layer = nextLayer;
-    if ((backendCfg.steel_text_style ?? null) !== nextStyle) patch.steel_text_style = nextStyle;
-    if ((backendCfg.steel_text_height ?? null) !== nextHeight) patch.steel_text_height = nextHeight;
-    if ((backendCfg.steel_text_width ?? null) !== nextWidth) patch.steel_text_width = nextWidth;
-    if ((backendCfg.steel_text_oblique ?? null) !== nextOblique) patch.steel_text_oblique = nextOblique;
-    if ((backendCfg.steel_text_rotation ?? null) !== nextRotation) patch.steel_text_rotation = nextRotation;
+      if ((backendCfg.steel_text_layer ?? null) !== nextLayer) patch.steel_text_layer = nextLayer;
+      if ((backendCfg.steel_text_style ?? null) !== nextStyle) patch.steel_text_style = nextStyle;
+      if ((backendCfg.steel_text_height ?? null) !== nextHeight) patch.steel_text_height = nextHeight;
+      if ((backendCfg.steel_text_width ?? null) !== nextWidth) patch.steel_text_width = nextWidth;
+      if ((backendCfg.steel_text_oblique ?? null) !== nextOblique) patch.steel_text_oblique = nextOblique;
+      if ((backendCfg.steel_text_rotation ?? null) !== nextRotation) patch.steel_text_rotation = nextRotation;
 
-    if (!Object.keys(patch).length) return;
+      if (!Object.keys(patch).length) return;
 
-    const seq = ++steelTextSaveSeqRef.current;
-    const t = window.setTimeout(async () => {
-      try {
-        const cfg = await updateConfig(patch);
-        if (steelTextSaveSeqRef.current !== seq) return;
-        setBackendCfg(cfg);
-      } catch (e) {
-        console.warn('No se pudo guardar steel_text_*', e);
-      }
-    }, 500);
-
-    return () => window.clearTimeout(t);
-  }, [
-    steelTextLayerDraft,
-    steelTextStyleDraft,
-    steelTextHeightDraft,
-    steelTextWidthDraft,
-    steelTextObliqueDraft,
-    steelTextRotationDraft,
-    backendCfg,
-  ]);
+      const cfg = await updateConfig(patch);
+      setBackendCfg(cfg);
+    }
+  );
 
   // Autosave (debounced) al modificar proyección de losa.
-  useEffect(() => {
-    if (!backendCfg) return;
+  useDebounce(
+    { offset: slabProjOffsetDraft, layer: slabProjLayerDraft },
+    500,
+    async (drafts) => {
+      if (!backendCfg) return;
 
-    const normText = (v: string) => {
-      const s = String(v ?? '').trim();
-      return s ? s : null;
-    };
+      const normText = (v: string) => {
+        const s = String(v ?? '').trim();
+        return s ? s : null;
+      };
 
-    const currentOffset = typeof backendCfg.slab_proj_offset_m === 'number' && Number.isFinite(backendCfg.slab_proj_offset_m) ? backendCfg.slab_proj_offset_m : 0.2;
-    const nextOffsetRaw = Number.parseFloat(String(slabProjOffsetDraft ?? '').trim().replace(',', '.'));
-    const nextOffset = Number.isFinite(nextOffsetRaw) ? Math.max(0, nextOffsetRaw) : currentOffset;
-    const nextLayer = normText(slabProjLayerDraft);
+      const currentOffset = typeof backendCfg.slab_proj_offset_m === 'number' && Number.isFinite(backendCfg.slab_proj_offset_m) ? backendCfg.slab_proj_offset_m : 0.2;
+      const nextOffsetRaw = Number.parseFloat(String(drafts.offset ?? '').trim().replace(',', '.'));
+      const nextOffset = Number.isFinite(nextOffsetRaw) ? Math.max(0, nextOffsetRaw) : currentOffset;
+      const nextLayer = normText(drafts.layer);
 
-    const patch: Partial<BackendAppConfig> = {};
-    if (Math.abs(nextOffset - currentOffset) > 1e-9) patch.slab_proj_offset_m = nextOffset;
-    if ((backendCfg.slab_proj_layer ?? null) !== nextLayer) patch.slab_proj_layer = nextLayer;
-    if (!Object.keys(patch).length) return;
+      const patch: Partial<BackendAppConfig> = {};
+      if (Math.abs(nextOffset - currentOffset) > 1e-9) patch.slab_proj_offset_m = nextOffset;
+      if ((backendCfg.slab_proj_layer ?? null) !== nextLayer) patch.slab_proj_layer = nextLayer;
+      if (!Object.keys(patch).length) return;
 
-    const seq = ++slabProjSaveSeqRef.current;
-    const t = window.setTimeout(async () => {
-      try {
-        const cfg = await updateConfig(patch);
-        if (slabProjSaveSeqRef.current !== seq) return;
-        setBackendCfg(cfg);
-      } catch (e) {
-        console.warn('No se pudo guardar slab_proj_*', e);
-      }
-    }, 500);
-
-    return () => window.clearTimeout(t);
-  }, [slabProjOffsetDraft, slabProjLayerDraft, backendCfg]);
+      const cfg = await updateConfig(patch);
+      setBackendCfg(cfg);
+    }
+  );
 
   // Preview
   useEffect(() => {
@@ -3163,22 +1835,35 @@ export default function App() {
     if (rect.width < 2 || rect.height < 2) return;
 
     previewDrawRafRef.current = window.requestAnimationFrame(() => {
-      const renderBounds = (viewport ?? (preview?.bounds as Bounds | undefined)) ?? null;
-      drawPreview(canvas, preview, renderBounds);
-      if (preview && renderBounds) drawSelectionOverlay(canvas, preview, dev, selection, renderBounds);
+      const renderBounds = (detailViewport ?? (preview?.bounds as Bounds | undefined)) ?? null;
+      const yScale = steelViewActive && steelYScale2 ? 2 : 1;
+      drawPreview(canvas, preview, renderBounds, { yScale });
+      // En la Vista con zoom NO se colorea la selección (solo en Vista general).
 
       const dev0 = previewPayloadInfo.payload.developments?.[0];
-      if (preview && dev0 && showNT && renderBounds) drawLabels(canvas, preview, dev0, renderBounds);
+      if (preview && dev0 && showNT && renderBounds) drawLabels(canvas, preview, dev0, renderBounds, { yScale });
+
+      // Dibujar vigas transversales
+      if (dev && renderBounds) {
+        try {
+          drawCrossbeamsOverlay(canvas, dev, renderBounds, { yScale });
+        } catch (e) {
+          console.warn('Error dibujando vigas transversales en 2D:', e);
+        }
+      }
 
       // Dibujar acero en un segundo frame para evitar bloquear la primera pintura.
-      if (preview && renderBounds && (showLongitudinal || showStirrups || tab === 'acero')) {
+      if (preview && renderBounds && steelViewActive && (showLongitudinal || showStirrups)) {
         previewOverlayRafRef.current = window.requestAnimationFrame(() => {
           try {
-            // En Concreto no debe verse el acero: el overlay de acero solo se dibuja en la pestaña Acero.
-            if (tab === 'acero' && (showLongitudinal || showStirrups)) {
-              drawSteelOverlay(canvas, preview, dev, renderBounds, appCfg.recubrimiento, hookLegM, { showLongitudinal, showStirrups });
+            // Vista de acero activa (pestaña Acero o anclada): dibujar overlay 2D.
+            if (showLongitudinal || showStirrups) {
+              drawSteelOverlay(canvas, preview, dev, renderBounds, appCfg.recubrimiento, hookLegM, {
+                showLongitudinal,
+                showStirrups,
+                yScale: steelViewActive && steelYScale2 ? 2 : 1,
+              });
             }
-            if (tab === 'acero') drawCutMarker2D(canvas, preview, renderBounds, sectionXU);
           } catch (e) {
             console.warn('Error dibujando overlay 2D de acero', e);
           }
@@ -3200,16 +1885,70 @@ export default function App() {
     preview,
     showNT,
     selection,
-    viewport,
+    detailViewport,
     dev,
     tab,
+    steelViewPinned,
     appCfg.recubrimiento,
     hookLegM,
     sectionXU,
     showLongitudinal,
     showStirrups,
+    steelYScale2,
     previewPayloadInfo.key,
     previewCanvasResizeTick,
+  ]);
+
+  // Render del canvas overview (estático: siempre bounds completos)
+  useEffect(() => {
+    const canvas = overviewCanvasRef.current;
+    if (!canvas) return;
+    if (overviewPreviewDrawRafRef.current != null) {
+      window.cancelAnimationFrame(overviewPreviewDrawRafRef.current);
+      overviewPreviewDrawRafRef.current = null;
+    }
+    if (overviewPreviewOverlayRafRef.current != null) {
+      window.cancelAnimationFrame(overviewPreviewOverlayRafRef.current);
+      overviewPreviewOverlayRafRef.current = null;
+    }
+
+    const rect = canvas.getBoundingClientRect();
+    if (rect.width < 2 || rect.height < 2) return;
+
+    overviewPreviewDrawRafRef.current = window.requestAnimationFrame(() => {
+      const renderBounds = (preview?.bounds as Bounds | undefined) ?? null;
+      drawPreview(canvas, preview, renderBounds);
+      if (preview && renderBounds) drawSelectionOverlay(canvas, preview, dev, selection, renderBounds);
+
+      const dev0 = previewPayloadInfo.payload.developments?.[0];
+      if (preview && dev0 && showNT && renderBounds) drawLabels(canvas, preview, dev0, renderBounds);
+
+      // La línea de corte se visualiza solo en la Vista general.
+      if (steelViewActive && preview && renderBounds) {
+        drawCutMarker2D(canvas, preview, renderBounds, sectionXU);
+      }
+    });
+
+    return () => {
+      if (overviewPreviewDrawRafRef.current != null) {
+        window.cancelAnimationFrame(overviewPreviewDrawRafRef.current);
+        overviewPreviewDrawRafRef.current = null;
+      }
+      if (overviewPreviewOverlayRafRef.current != null) {
+        window.cancelAnimationFrame(overviewPreviewOverlayRafRef.current);
+        overviewPreviewOverlayRafRef.current = null;
+      }
+    };
+  }, [
+    preview,
+    showNT,
+    selection,
+    dev,
+    tab,
+    steelViewPinned,
+    sectionXU,
+    previewPayloadInfo.key,
+    overviewCanvasResizeTick,
   ]);
 
   // Rango X del desarrollo en unidades (considera top y bottom, igual que overlay)
@@ -3802,7 +2541,7 @@ export default function App() {
     renderer.outputColorSpace = THREE.SRGBColorSpace;
     renderer.toneMapping = THREE.ACESFilmicToneMapping;
     renderer.toneMappingExposure = 1.0;
-    renderer.physicallyCorrectLights = true;
+    (renderer as any).physicallyCorrectLights = true;
 
     const scene = new THREE.Scene();
 
@@ -3816,14 +2555,21 @@ export default function App() {
 
     const controls = new OrbitControls(camera, renderer.domElement);
     controls.enableDamping = true;
-    controls.dampingFactor = 0.07;
-    controls.rotateSpeed = 0.75;
-    controls.zoomSpeed = 1.0;
-    controls.panSpeed = 0.75;
+    controls.dampingFactor = 0.09;
+    controls.rotateSpeed = 0.65;
+    controls.zoomSpeed = 1.15;
+    controls.panSpeed = 1.05;
     controls.screenSpacePanning = true;
     controls.zoomToCursor = true;
     controls.minPolarAngle = 0.05;
     controls.maxPolarAngle = Math.PI - 0.05;
+    // Navegación 3D más fluida: zoom con wheel, pan con botón medio (y también con derecho), rotación con izquierdo.
+    // Esto suele sentirse más cercano a CAD/BIM en práctica.
+    controls.mouseButtons = {
+      LEFT: THREE.MOUSE.ROTATE,
+      MIDDLE: THREE.MOUSE.PAN,
+      RIGHT: THREE.MOUSE.PAN,
+    } as any;
 
     const hemi = new THREE.HemisphereLight(0xffffff, 0xffffff, 0.45);
     scene.add(hemi);
@@ -3910,11 +2656,139 @@ export default function App() {
     };
   }, [previewView, threeProjection]);
 
+  // Inicializar escena 3D overview (estática, sin zoom/pan/rotate)
+  useEffect(() => {
+    if (previewView !== '3d') return;
+    const host = threeOverviewHostRef.current;
+    if (!host) return;
+    if (threeOverviewRef.current) return;
+
+    const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
+    renderer.setClearColor(0x000000, 0);
+    renderer.outputColorSpace = THREE.SRGBColorSpace;
+    renderer.toneMapping = THREE.ACESFilmicToneMapping;
+    renderer.toneMappingExposure = 1.0;
+    (renderer as any).physicallyCorrectLights = true;
+
+    const scene = new THREE.Scene();
+
+    const perspCamera = new THREE.PerspectiveCamera(45, 1, 0.01, 5000);
+    perspCamera.position.set(120, 80, 120);
+
+    const orthoCamera = new THREE.OrthographicCamera(-100, 100, 100, -100, 0.01, 5000);
+    orthoCamera.position.set(120, 80, 120);
+
+    const camera = threeProjection === 'orthographic' ? orthoCamera : perspCamera;
+
+    const controls = new OrbitControls(camera, renderer.domElement);
+    controls.enableDamping = false;
+    controls.enableRotate = false;
+    controls.enableZoom = false;
+    controls.enablePan = false;
+
+    const hemi = new THREE.HemisphereLight(0xffffff, 0xffffff, 0.45);
+    scene.add(hemi);
+    const ambient = new THREE.AmbientLight(0xffffff, 0.35);
+    scene.add(ambient);
+    const key = new THREE.DirectionalLight(0xffffff, 0.95);
+    key.position.set(200, 250, 120);
+    scene.add(key);
+    const fill = new THREE.DirectionalLight(0xffffff, 0.35);
+    fill.position.set(-220, 140, -180);
+    scene.add(fill);
+
+    const root = new THREE.Group();
+    scene.add(root);
+
+    host.appendChild(renderer.domElement);
+
+    const onResize = () => {
+      const rect = host.getBoundingClientRect();
+      const w = Math.max(1, Math.round(rect.width));
+      const h = Math.max(1, Math.round(rect.height));
+      renderer.setSize(w, h, false);
+      const s = threeOverviewRef.current;
+      const cam = (s?.camera ?? camera) as any;
+      if (cam?.isPerspectiveCamera) {
+        cam.aspect = w / h;
+        cam.updateProjectionMatrix();
+      } else if (cam?.isOrthographicCamera) {
+        setOrthoFrustum(cam as THREE.OrthographicCamera, w / h);
+        cam.updateProjectionMatrix();
+      }
+    };
+
+    const ro = new ResizeObserver(onResize);
+    ro.observe(host);
+    onResize();
+
+    let raf = 0;
+    const tick = () => {
+      const s = threeOverviewRef.current;
+      if (!s) return;
+      s.controls.update();
+      s.renderer.render(s.scene, s.camera);
+      raf = window.requestAnimationFrame(tick);
+    };
+    raf = window.requestAnimationFrame(tick);
+
+    threeOverviewRef.current = {
+      renderer,
+      scene,
+      camera,
+      perspCamera,
+      orthoCamera,
+      controls,
+      root,
+      spans: [],
+      nodes: [],
+      spanSteel: [],
+      spanStirrups: [],
+      nodeSteel: [],
+      nodeStirrups: [],
+    };
+
+    return () => {
+      window.cancelAnimationFrame(raf);
+      ro.disconnect();
+      disposeObject3D(root);
+      renderer.dispose();
+      renderer.domElement.remove();
+      threeOverviewRef.current = null;
+    };
+  }, [previewView, threeProjection]);
+
   // Cambiar proyección 3D sin reconstruir geometría.
   useEffect(() => {
     if (previewView !== '3d') return;
     const state = threeRef.current;
     const host = threeHostRef.current;
+    if (!state || !host) return;
+
+    const rect = host.getBoundingClientRect();
+    const w = Math.max(1, Math.round(rect.width));
+    const h = Math.max(1, Math.round(rect.height));
+    const next = threeProjection === 'orthographic' ? state.orthoCamera : state.perspCamera;
+
+    state.camera = next;
+    (state.controls as any).object = next;
+    if ((next as any).isPerspectiveCamera) {
+      (next as THREE.PerspectiveCamera).aspect = w / h;
+      (next as THREE.PerspectiveCamera).updateProjectionMatrix();
+    } else {
+      setOrthoFrustum(next as THREE.OrthographicCamera, w / h);
+      (next as THREE.OrthographicCamera).updateProjectionMatrix();
+    }
+
+    fitCameraToObject(next, state.controls, state.root, { w, h });
+  }, [threeProjection, previewView]);
+
+  // Cambiar proyección 3D (overview) sin reconstruir geometría.
+  useEffect(() => {
+    if (previewView !== '3d') return;
+    const state = threeOverviewRef.current;
+    const host = threeOverviewHostRef.current;
     if (!state || !host) return;
 
     const rect = host.getBoundingClientRect();
@@ -4045,6 +2919,45 @@ export default function App() {
         mesh.position.set((x0 + x1) / 2, (y0 + y1) / 2, 0);
         parent.add(mesh);
       }
+    }
+
+    // Vigas transversales (crossbeams): 1.00m perpendiculares solo con geometría del casco
+    try {
+      const crossbeams = (dev as any).crossbeams || [];
+      for (const cb of crossbeams) {
+        try {
+          const x = mToUnits(dev, cb.x);
+          const h = mToUnits(dev, cb.h);
+          const b = mToUnits(dev, cb.b);
+          const depth = mToUnits(dev, 1.0); // 1.00m fijo perpendicular
+
+          const spanIdx = cb.span_index;
+          if (spanIdx < 0 || spanIdx >= spanGroups.length) continue;
+
+          // Crear geometría de caja
+          // Width (perpendicular al desarrollo) = 1.00m
+          // Height = h
+          // Depth (ancho de la viga) = b
+          const geom = new THREE.BoxGeometry(depth, h, b);
+          const mat = baseMat.clone();
+          mat.opacity = 0.35; // Ligeramente más opaco para distinguir
+
+          const mesh = new THREE.Mesh(geom, mat);
+
+          // Posicionar en X, centrado verticalmente en h/2
+          const yBaseU = mToUnits(dev, clampNumber((dev as any).y0 ?? 0, 0));
+          mesh.position.set(x, yBaseU + h / 2, 0);
+
+          // Rotar 90° alrededor del eje Y para que sea perpendicular
+          mesh.rotation.y = Math.PI / 2;
+
+          spanGroups[spanIdx].add(mesh);
+        } catch (e) {
+          console.warn('Error creando mesh de viga transversal:', e);
+        }
+      }
+    } catch (e) {
+      console.warn('Error procesando vigas transversales en 3D:', e);
     }
 
     // Acero longitudinal (simplificado): barras rectas por tramo según layout de sección.
@@ -4217,7 +3130,8 @@ export default function App() {
           diaKey: string,
           kind: 'hook' | 'anchorage',
           side: 'top' | 'bottom',
-          xFaceU?: number
+          xFaceU?: number,
+          customLengthM?: number
         ) => {
           if (typeof xFaceU === 'number' && Number.isFinite(xFaceU)) {
             const target = xFaceU - dir * coverU;
@@ -4225,7 +3139,11 @@ export default function App() {
             const hi = Math.max(xU, xFaceU);
             return Math.min(hi, Math.max(lo, target));
           }
-          return xU + dir * mToUnits(dev, lengthFromTableMeters(diaKey, kind, side));
+          // Use custom length if provided (Preferencia 01), otherwise use table
+          const lengthM = (typeof customLengthM === 'number' && customLengthM > 0)
+            ? customLengthM
+            : lengthFromTableMeters(diaKey, kind, side);
+          return xU + dir * mToUnits(dev, lengthM);
         };
 
         const addBars = (face: 'top' | 'bottom') => {
@@ -4270,7 +3188,9 @@ export default function App() {
 
             if (leftKind === 'hook' || leftKind === 'development') {
               const kind2 = leftKind === 'hook' ? 'hook' : 'anchorage';
-              const x2 = computeEndX2(xaSide, -1, diaKey, kind2, face, xFaceLeft);
+              const customLengthField = face === 'top' ? 'steel_top_2_anchorage_length' : 'steel_bottom_2_anchorage_length';
+              const customLength = nL ? (nL as any)[customLengthField] : undefined;
+              const x2 = computeEndX2(xaSide, -1, diaKey, kind2, face, xFaceLeft, customLength);
               addXSegment(x2, xaSide, yU, zU, mainRadiusU, extraMat);
               if (leftKind === 'hook') {
                 const y2 = face === 'top' ? yU - hookLegU : yU + hookLegU;
@@ -4280,7 +3200,9 @@ export default function App() {
 
             if (rightKind === 'hook' || rightKind === 'development') {
               const kind2 = rightKind === 'hook' ? 'hook' : 'anchorage';
-              const x2 = computeEndX2(xbSide, +1, diaKey, kind2, face, xFaceRight);
+              const customLengthField = face === 'top' ? 'steel_top_1_anchorage_length' : 'steel_bottom_1_anchorage_length';
+              const customLength = nR ? (nR as any)[customLengthField] : undefined;
+              const x2 = computeEndX2(xbSide, +1, diaKey, kind2, face, xFaceRight, customLength);
               addXSegment(xbSide, x2, yU, zU, mainRadiusU, extraMat);
               if (rightKind === 'hook') {
                 const y2 = face === 'top' ? yU - hookLegU : yU + hookLegU;
@@ -4796,6 +3718,41 @@ export default function App() {
     }
   }, [dev, preview, previewView]);
 
+  // Mantener 3D overview sincronizado (clon del root del detalle)
+  useEffect(() => {
+    if (previewView !== '3d') return;
+    const src = threeRef.current;
+    const dst = threeOverviewRef.current;
+    const host = threeOverviewHostRef.current;
+    if (!src || !dst || !host) return;
+
+    // Limpiar dst.root
+    while (dst.root.children.length) {
+      const child = dst.root.children[0];
+      dst.root.remove(child);
+      disposeObject3D(child);
+    }
+
+    // Clonar geometría del detalle
+    const clonedRoot = src.root.clone(true);
+    while (clonedRoot.children.length) {
+      const child = clonedRoot.children[0];
+      clonedRoot.remove(child);
+      dst.root.add(child);
+    }
+
+    // Aplicar toggles de visibilidad por nombre de grupo
+    dst.root.traverse((o: any) => {
+      if (!o) return;
+      if (o.name === '__steel') o.visible = showLongitudinal;
+      if (o.name === '__stirrups') o.visible = showStirrups;
+    });
+
+    const rect = host.getBoundingClientRect();
+    const viewport = { w: Math.max(1, Math.round(rect.width)), h: Math.max(1, Math.round(rect.height)) };
+    fitCameraToObject(dst.camera, dst.controls, dst.root, viewport);
+  }, [dev, preview, previewView, showLongitudinal, showStirrups]);
+
   // Togglear visibilidad de capas 3D (sin reconstruir)
   useEffect(() => {
     if (previewView !== '3d') return;
@@ -4820,16 +3777,28 @@ export default function App() {
     if (selection.kind === 'span') {
       const g = state.spans[selection.index];
       if (g) setEmissiveOnObject(g, 0xfacc15, 0.25);
+      if (g) {
+        const host = threeHostRef.current;
+        const rect = host?.getBoundingClientRect();
+        const viewport = rect ? { w: Math.max(1, Math.round(rect.width)), h: Math.max(1, Math.round(rect.height)) } : undefined;
+        fitCameraToObject(state.camera, state.controls, g, viewport);
+      }
     } else if (selection.kind === 'node') {
       const g = state.nodes[selection.index];
       if (g) setEmissiveOnObject(g, 0xfacc15, 0.40);
+      if (g) {
+        const host = threeHostRef.current;
+        const rect = host?.getBoundingClientRect();
+        const viewport = rect ? { w: Math.max(1, Math.round(rect.width)), h: Math.max(1, Math.round(rect.height)) } : undefined;
+        fitCameraToObject(state.camera, state.controls, g, viewport);
+      }
     }
   }, [selection, zoomEnabled, previewView]);
 
   // Si se desactiva Zoom, apaga correlación y vuelve a vista general
   useEffect(() => {
     if (zoomEnabled) return;
-    setViewport(null);
+    setDetailViewport(null);
     setSelection({ kind: 'none' });
   }, [zoomEnabled]);
 
@@ -4837,8 +3806,8 @@ export default function App() {
   useEffect(() => {
     const onKeyDown = (e: KeyboardEvent) => {
       if (e.key !== 'Escape') return;
-      if (viewport) {
-        setViewport(null);
+      if (detailViewport) {
+        setDetailViewport(null);
         e.preventDefault();
         return;
       }
@@ -4849,12 +3818,43 @@ export default function App() {
     };
     window.addEventListener('keydown', onKeyDown);
     return () => window.removeEventListener('keydown', onKeyDown);
-  }, [viewport, selection.kind]);
+  }, [detailViewport, selection.kind]);
 
   function applySelection(sel: Selection, nextViewport: boolean) {
     if (!zoomEnabled) return;
     setSelection(sel);
-    if (nextViewport && preview) setViewport(computeZoomBounds(dev, preview, sel));
+    if (nextViewport && preview) setDetailViewport(computeZoomBounds(dev, preview, sel));
+  }
+
+  function moveZoomSelection(dir: -1 | 1) {
+    if (!zoomEnabled) return;
+    const spansCount = (dev.spans ?? []).length;
+    const nodesCount = (dev.nodes ?? []).length;
+    if (!(nodesCount >= 1) || nodesCount !== spansCount + 1) {
+      // fallback
+      return;
+    }
+
+    const maxIdx = 2 * spansCount; // N1..Tn..N(n+1)
+
+    const selToIdx = (s: Selection): number | null => {
+      if (s.kind === 'node') return Math.max(0, Math.min(maxIdx, 2 * s.index));
+      if (s.kind === 'span') return Math.max(0, Math.min(maxIdx, 2 * s.index + 1));
+      return null;
+    };
+
+    const idxToSel = (i: number): Selection => {
+      const ii = Math.max(0, Math.min(maxIdx, Math.trunc(i)));
+      if (ii % 2 === 0) return { kind: 'node', index: Math.min(nodesCount - 1, Math.max(0, ii / 2)) };
+      return { kind: 'span', index: Math.min(spansCount - 1, Math.max(0, (ii - 1) / 2)) };
+    };
+
+    const cur = selToIdx(selection);
+    let next = 0;
+    if (cur == null) next = dir > 0 ? 0 : maxIdx;
+    else next = Math.max(0, Math.min(maxIdx, cur + dir));
+
+    applySelection(idxToSel(next), true);
   }
 
   function onCanvasWheel(e: React.WheelEvent<HTMLCanvasElement>) {
@@ -4863,7 +3863,7 @@ export default function App() {
     // Evitar scroll de la página mientras se usa el canvas.
     e.preventDefault();
 
-    const b0 = (viewportRef.current ?? (preview.bounds as Bounds)) as Bounds;
+    const b0 = (detailViewportRef.current ?? (preview.bounds as Bounds)) as Bounds;
     const w0 = Math.max(1e-6, b0.max_x - b0.min_x);
     const h0 = Math.max(1e-6, b0.max_y - b0.min_y);
     const cx = (b0.min_x + b0.max_x) / 2;
@@ -4875,7 +3875,7 @@ export default function App() {
     const w1 = Math.max(1e-6, w0 * factor);
     const h1 = Math.max(1e-6, h0 * factor);
 
-    setViewport({
+    setDetailViewport({
       min_x: cx - w1 / 2,
       max_x: cx + w1 / 2,
       min_y: cy - h1 / 2,
@@ -4929,14 +3929,15 @@ export default function App() {
     const cssW = Math.max(1, Math.round(rect.width));
     const cssH = Math.max(1, Math.round(rect.height));
 
-    const b0 = (viewportRef.current ?? (preview.bounds as Bounds)) as Bounds;
+    const b0 = (detailViewportRef.current ?? (preview.bounds as Bounds)) as Bounds;
     const { scale } = fitTransform(b0, cssW, cssH);
     const s = Math.max(1e-6, scale);
 
     const dxW = dxPx / s;
-    const dyW = dyPx / s;
+    const yScale = steelViewActive && steelYScale2 ? 2 : 1;
+    const dyW = dyPx / (s * Math.max(1e-6, yScale));
 
-    setViewport((prev) => {
+    setDetailViewport((prev) => {
       const b = (prev ?? (preview.bounds as Bounds)) as Bounds;
       // Drag “arrastra” el dibujo: mover bounds en sentido contrario en X.
       return {
@@ -4973,7 +3974,7 @@ export default function App() {
     const cx = e.clientX - rect.left;
     const cy = e.clientY - rect.top;
 
-    const rb = (viewport ?? (preview.bounds as Bounds)) as Bounds;
+    const rb = (detailViewport ?? (preview.bounds as Bounds)) as Bounds;
     const { toWorld } = canvasUnmapper(rb, cssW, cssH);
     const [wx] = toWorld(cx, cy);
 
@@ -5005,6 +4006,45 @@ export default function App() {
     if (best.kind !== 'none' && bestDist <= threshold) {
       applySelection(best, true);
     }
+  }
+
+  function onOverviewCanvasClick(e: React.MouseEvent<HTMLCanvasElement>) {
+    if (!preview || !zoomEnabled) return;
+
+    const rect = (e.currentTarget as HTMLCanvasElement).getBoundingClientRect();
+    const cssW = Math.max(1, Math.round(rect.width));
+    const cssH = Math.max(1, Math.round(rect.height));
+    const cx = e.clientX - rect.left;
+    const cy = e.clientY - rect.top;
+
+    const rb = (preview.bounds as Bounds) as Bounds;
+    const { toWorld } = canvasUnmapper(rb, cssW, cssH);
+    const [wx] = toWorld(cx, cy);
+
+    const origins = computeNodeOrigins(dev);
+    const nodeXs = origins.map((_, i) => computeNodeMarkerX(dev, origins, i));
+    const spanXs = (dev.spans ?? []).map((_, i) => computeSpanMidX(dev, origins, i));
+
+    let best: Selection = { kind: 'none' };
+    let bestDist = Number.POSITIVE_INFINITY;
+
+    for (let i = 0; i < nodeXs.length; i++) {
+      const d = Math.abs(wx - nodeXs[i]);
+      if (d < bestDist) {
+        bestDist = d;
+        best = { kind: 'node', index: i };
+      }
+    }
+
+    for (let i = 0; i < spanXs.length; i++) {
+      const d = Math.abs(wx - spanXs[i]);
+      if (d < bestDist) {
+        bestDist = d;
+        best = { kind: 'span', index: i };
+      }
+    }
+
+    applySelection(best, true);
   }
 
   function updateDevPatch(patch: Partial<DevelopmentIn>) {
@@ -5180,10 +4220,38 @@ export default function App() {
       const lastSpan = spans0.length ? spans0[spans0.length - 1] : INITIAL_SPAN;
       const lastNode = nodes0.length ? nodes0[nodes0.length - 1] : INITIAL_NODE;
 
-      const spans = [...spans0, cloneSpan(lastSpan)];
-      const nodes = [...nodes0, cloneNode(lastNode)];
+      let spans = [...spans0, cloneSpan(lastSpan)];
+      let nodes = [...nodes0, cloneNode(lastNode)];
+
+      // Si la preferencia es 'basico', aplicar configuración de acero en todos los nodos y spans
+      if (defaultPref === 'basico') {
+        if (nodes.length > 0) {
+          nodes = applyBasicPreferenceToNodes(nodes);
+        }
+        if (spans.length > 0) {
+          spans = applyBasicPreferenceToSpans(spans);
+        }
+        console.log('✓ Preferencia 01: Básico aplicada después de añadir tramo');
+      }
+
       return normalizeDev({ ...prev, spans, nodes } as DevelopmentIn, appCfg);
     });
+  }
+
+  async function handleSaveManual() {
+    try {
+      setBusy(true);
+      setSaveStatus('saving');
+      await saveState(payload);
+      setSaveStatus('saved');
+      setTimeout(() => setSaveStatus(null), 2000);
+    } catch (err: any) {
+      setSaveStatus('error');
+      setError(err?.message ?? 'Error al guardar');
+      setTimeout(() => setSaveStatus(null), 4000);
+    } finally {
+      setBusy(false);
+    }
   }
 
   function clearDevelopment() {
@@ -5192,7 +4260,7 @@ export default function App() {
     setError(null);
     setWarning(null);
     setSelection({ kind: 'none' });
-    setViewport(null);
+    setDetailViewport(null);
     setConcretoLocked(false);
     setDev(defaultDevelopment(appCfg));
   }
@@ -5260,12 +4328,29 @@ export default function App() {
       const span1 = (dev.spans ?? [])[0] ?? INITIAL_SPAN;
       const h0 = span1.h;
       const b0 = span1.b ?? INITIAL_SPAN.b ?? 0;
-      const incoming: DevelopmentIn = {
+      let incoming: DevelopmentIn = {
         ...res.development,
         floor_start: (dev as any).floor_start ?? '6to',
         floor_end: (dev as any).floor_end ?? '9no',
         spans: (res.development.spans ?? []).map((s) => ({ ...s, h: h0, b: b0 })),
       };
+
+      // Si la preferencia es 'basico', aplicar configuración de acero en nodos y spans
+      if (defaultPref === 'basico') {
+        let updatedNodes = incoming.nodes;
+        let updatedSpans = incoming.spans;
+
+        if (incoming.nodes && incoming.nodes.length > 0) {
+          updatedNodes = applyBasicPreferenceToNodes([...incoming.nodes]);
+        }
+        if (incoming.spans && incoming.spans.length > 0) {
+          updatedSpans = applyBasicPreferenceToSpans([...incoming.spans]);
+        }
+
+        incoming = { ...incoming, nodes: updatedNodes, spans: updatedSpans };
+        console.log('✓ Preferencia 01: Básico aplicada a DXF importado -', updatedNodes?.length || 0, 'nodos,', updatedSpans?.length || 0, 'tramos');
+      }
+
       setDev(normalizeDev(incoming, appCfg));
       if (res.warnings?.length) setWarning(res.warnings.join('\n'));
     } catch (e: any) {
@@ -5303,6 +4388,14 @@ export default function App() {
     setError(null);
   }
 
+  // Fallback visual global: si los datos principales no están listos, mostrar mensaje claro
+  if (!dev || !appCfg) {
+    return (
+      <div style={{ color: '#fff', background: '#0b1220', height: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 22 }}>
+        ⚠️ Error: Datos principales no cargados. Revisa la inicialización de la app o el backend.
+      </div>
+    );
+  }
   return (
     <div className="layout">
       <header className="header">
@@ -5327,21 +4420,6 @@ export default function App() {
         )}
 
         <div className="actions">
-          <div className="segmented">
-            <button className={tab === 'config' ? 'segBtn segBtnActive' : 'segBtn'} onClick={() => setTab('config')} type="button">
-              Config
-            </button>
-            <button className={tab === 'concreto' ? 'segBtn segBtnActive' : 'segBtn'} onClick={() => setTab('concreto')} type="button">
-              Concreto
-            </button>
-            <button className={tab === 'acero' ? 'segBtn segBtnActive' : 'segBtn'} onClick={() => setTab('acero')} type="button">
-              Acero
-            </button>
-            <button className={tab === 'json' ? 'segBtn segBtnActive' : 'segBtn'} onClick={() => setTab('json')} type="button">
-              JSON
-            </button>
-          </div>
-
           <button className="btn" onClick={onExportDxf} type="button" disabled={busy}>
             Exportar DXF
           </button>
@@ -5349,1425 +4427,178 @@ export default function App() {
       </header>
 
       <main className="content">
-        <section className="panel">
-          <div className="panelTitle">EDITOR DE DESARROLLO DE VIGA.</div>
-
-          {tab === 'config' ? (
-            <div className="form">
-              <div className="muted">Config general (solo estos parámetros).</div>
-              <div className="grid4">
-                <label className="field">
-                  <div className="label">d</div>
-                  <input className="input" type="number" step="0.01" value={appCfg.d} onChange={(e) => setAppCfg((p) => ({ ...p, d: clampNumber(e.target.value, p.d) }))} />
-                </label>
-                <label className="field">
-                  <div className="label">unit_scale</div>
-                  <input
-                    className="input"
-                    type="number"
-                    step="0.1"
-                    value={appCfg.unit_scale}
-                    onChange={(e) => setAppCfg((p) => ({ ...p, unit_scale: clampNumber(e.target.value, p.unit_scale) }))}
-                  />
-                </label>
-                <label className="field">
-                  <div className="label">x0</div>
-                  <input className="input" type="number" step="0.01" value={appCfg.x0} onChange={(e) => setAppCfg((p) => ({ ...p, x0: clampNumber(e.target.value, p.x0) }))} />
-                </label>
-                <label className="field">
-                  <div className="label">y0</div>
-                  <input className="input" type="number" step="0.01" value={appCfg.y0} onChange={(e) => setAppCfg((p) => ({ ...p, y0: clampNumber(e.target.value, p.y0) }))} />
-                </label>
-
-                <label className="field">
-                  <div className="label">recubrimiento (m)</div>
-                  <input
-                    className="input"
-                    type="number"
-                    step="0.01"
-                    value={appCfg.recubrimiento}
-                    onChange={(e) => setAppCfg((p) => ({ ...p, recubrimiento: clampNumber(e.target.value, p.recubrimiento) }))}
-                  />
-                </label>
-
-                <label className="field">
-                  <div className="label">Lc bastón (m)</div>
-                  <input
-                    className="input"
-                    type="number"
-                    step="0.01"
-                    value={appCfg.baston_Lc}
-                    onChange={(e) => setAppCfg((p) => ({ ...p, baston_Lc: clampNumber(e.target.value, p.baston_Lc) }))}
-                  />
-                </label>
-
-                <label className="field">
-                  <div className="label">L6 gancho (m)</div>
-                  <input className="input" type="number" step="0.01" value={hookLegDraft} onChange={(e) => setHookLegDraft(e.target.value)} />
-                </label>
+        <div className="mainGrid">
+          <div className="leftPane">
+            <section className="panel" style={{ padding: 10 }}>
+              <div className="segmented" aria-label="Navegación">
+                <button className={tab === 'config' ? 'segBtn segBtnActive' : 'segBtn'} onClick={() => setTab('config')} type="button">
+                  Config
+                </button>
+                <button className={tab === 'concreto' ? 'segBtn segBtnActive' : 'segBtn'} onClick={() => setTab('concreto')} type="button">
+                  Concreto
+                </button>
+                <button className={tab === 'acero' ? 'segBtn segBtnActive' : 'segBtn'} onClick={() => setTab('acero')} type="button">
+                  Acero
+                </button>
+                <button className={tab === 'json' ? 'segBtn segBtnActive' : 'segBtn'} onClick={() => setTab('json')} type="button">
+                  JSON
+                </button>
               </div>
+            </section>
 
-              <div className="hint"></div>
-              <div className="sectionHeader">
-                <div>Texto acero</div>
-                <div className="mutedSmall">Vacío = usar formato de la plantilla DXF</div>
-              </div>
+            <details
+              className="panel"
+              open={editorOpen}
+              onToggle={(e) => setEditorOpen((e.currentTarget as HTMLDetailsElement).open)}
+            >
+              <summary className="panelSummary">
+                <div className="panelSummaryInner">
+                  <div className="panelTitle" style={{ marginBottom: 0 }}>EDITOR DE DESARROLLO DE VIGA.</div>
 
-              <div className="grid4">
-                <label className="field">
-                  <div className="label">steel_text_layer</div>
-                  <input className="input" type="text" value={steelTextLayerDraft} onChange={(e) => setSteelTextLayerDraft(e.target.value)} />
-                </label>
-                <label className="field">
-                  <div className="label">steel_text_style</div>
-                  <input className="input" type="text" value={steelTextStyleDraft} onChange={(e) => setSteelTextStyleDraft(e.target.value)} />
-                </label>
-                <label className="field">
-                  <div className="label">steel_text_height</div>
-                  <input className="input" type="number" step="0.01" value={steelTextHeightDraft} onChange={(e) => setSteelTextHeightDraft(e.target.value)} />
-                </label>
-                <label className="field">
-                  <div className="label">steel_text_width</div>
-                  <input className="input" type="number" step="0.01" value={steelTextWidthDraft} onChange={(e) => setSteelTextWidthDraft(e.target.value)} />
-                </label>
-                <label className="field">
-                  <div className="label">steel_text_oblique</div>
-                  <input className="input" type="number" step="1" value={steelTextObliqueDraft} onChange={(e) => setSteelTextObliqueDraft(e.target.value)} />
-                </label>
-                <label className="field">
-                  <div className="label">steel_text_rotation</div>
-                  <input className="input" type="number" step="1" value={steelTextRotationDraft} onChange={(e) => setSteelTextRotationDraft(e.target.value)} />
-                </label>
-              </div>
-
-              <div className="hint"></div>
-              <div className="sectionHeader">
-                <div>Exportación DXF</div>
-                <div className="mutedSmall">Plantilla + asignación de capas (casco y acero opcional)</div>
-              </div>
-
-              <div className="grid4">
-                <label className="field">
-                  <div className="label">Proyección losa offset (m, hacia abajo)</div>
-                  <input className="input" type="number" step="0.01" value={slabProjOffsetDraft} onChange={(e) => setSlabProjOffsetDraft(e.target.value)} />
-                </label>
-                <label className="field">
-                  <div className="label">Proyección losa capa</div>
-                  <select className="input" value={slabProjLayerDraft} onChange={(e) => setSlabProjLayerDraft(e.target.value)}>
-                    {Array.from(new Set(['A-BEAM-LOSA-PROY', ...(templateLayers ?? [])])).map((ly) => (
-                      <option key={ly} value={ly}>
-                        {ly}
-                      </option>
-                    ))}
-                  </select>
-                </label>
-              </div>
-
-              <div className="rowBetween" style={{ gap: 10, alignItems: 'center' }}>
-                <div className="mutedSmall">
-                  Plantilla: <span className="mono">{templateName ?? '—'}</span>
+                  {tab === 'config' ? (
+                    <div style={{ display: 'flex', gap: 8, alignItems: 'flex-end' }}>
+                      <label
+                        className="field"
+                        style={{ minWidth: 260, flex: 1 }}
+                        onClick={(e) => e.stopPropagation()}
+                        onPointerDown={(e) => e.stopPropagation()}
+                      >
+                        <div className="label">Preferencia</div>
+                        <select
+                          className="input"
+                          value={defaultPref}
+                          onChange={(e) => onChangeDefaultPref(e.target.value as DefaultPreferenceId)}
+                          onClick={(e) => e.stopPropagation()}
+                          onPointerDown={(e) => e.stopPropagation()}
+                        >
+                          <option value="basico">Preferencia 01: Básico</option>
+                          <option value="personalizado">Personalizado</option>
+                        </select>
+                      </label>
+                      {defaultPref === 'basico' ? (
+                        <button
+                          className="btnSmall"
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            console.log('🔄 Re-aplicando Preferencia 01: Básico...');
+                            applyBasicoPreference();
+                          }}
+                          title="Re-aplicar configuración de Preferencia 01: acero 2Ø5/8, anclajes 75cm superior y 60cm inferior"
+                        >
+                          ⚡ Aplicar
+                        </button>
+                      ) : null}
+                    </div>
+                  ) : null}
                 </div>
+              </summary>
 
-                <div style={{ display: 'flex', gap: 8 }}>
-                  <button className="btnSmall" type="button" onClick={() => templateInputRef.current?.click()} disabled={busy}>
-                    Cargar plantilla DXF
-                  </button>
-                  <button className="btnSmall" type="button" onClick={onClearTemplate} disabled={busy || !templateName}>
-                    Quitar plantilla
-                  </button>
-                  <input
-                    ref={templateInputRef}
-                    type="file"
-                    accept=".dxf"
-                    style={{ display: 'none' }}
-                    onChange={(e) => {
-                      const f = e.target.files?.[0];
-                      e.target.value = '';
-                      if (f) onUploadTemplate(f);
-                    }}
-                  />
-                </div>
-              </div>
-
-              <div className="grid4">
-                <label className="field">
-                  <div className="label">Capa Casco</div>
-                  <select className="input" value={cascoLayer} onChange={(e) => setCascoLayer(e.target.value)}>
-                    {Array.from(new Set(['A-BEAM-CASCO', ...(templateLayers ?? [])])).map((ly) => (
-                      <option key={ly} value={ly}>
-                        {ly}
-                      </option>
-                    ))}
-                  </select>
-                </label>
-
-                <label className="field">
-                  <div className="label">Capa Acero</div>
-                  <select className="input" value={steelLayer} onChange={(e) => setSteelLayer(e.target.value)} disabled={!drawSteel}>
-                    {Array.from(new Set(['A-REBAR-CORRIDO', ...(templateLayers ?? [])])).map((ly) => (
-                      <option key={ly} value={ly}>
-                        {ly}
-                      </option>
-                    ))}
-                  </select>
-                </label>
-
-                <label className="field" style={{ justifyContent: 'flex-end' }}>
-                  <div className="label">Dibujar acero</div>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 10, height: 36 }}>
-                    <input type="checkbox" checked={drawSteel} onChange={(e) => setDrawSteel(e.target.checked)} />
-                    <div className="mutedSmall">{drawSteel ? 'Incluye' : 'Solo concreto'}</div>
-                  </div>
-                </label>
-              </div>
-            </div>
-          ) : null}
+              {tab === 'config' ? (
+                <ConfigTab
+                  defaultPref={defaultPref}
+                  onChangeDefaultPref={onChangeDefaultPref}
+                  slabProjOffsetDraft={slabProjOffsetDraft}
+                  setSlabProjOffsetDraft={setSlabProjOffsetDraft}
+                  slabProjLayerDraft={slabProjLayerDraft}
+                  setSlabProjLayerDraft={setSlabProjLayerDraft}
+                  templateName={templateName}
+                  templateLayers={templateLayers ?? []}
+                  onUploadTemplate={onUploadTemplate}
+                  onClearTemplate={onClearTemplate}
+                  busy={busy}
+                  cascoLayer={cascoLayer}
+                  setCascoLayer={setCascoLayer}
+                  steelLayer={steelLayer}
+                  setSteelLayer={setSteelLayer}
+                  drawSteel={drawSteel}
+                  setDrawSteel={setDrawSteel}
+                  appCfg={appCfg}
+                  setAppCfg={setAppCfg}
+                  clampNumber={clampNumber}
+                  hookLegDraft={hookLegDraft}
+                  setHookLegDraft={setHookLegDraft}
+                  steelTextLayerDraft={steelTextLayerDraft}
+                  setSteelTextLayerDraft={setSteelTextLayerDraft}
+                  steelTextStyleDraft={steelTextStyleDraft}
+                  setSteelTextStyleDraft={setSteelTextStyleDraft}
+                  steelTextHeightDraft={steelTextHeightDraft}
+                  setSteelTextHeightDraft={setSteelTextHeightDraft}
+                  steelTextWidthDraft={steelTextWidthDraft}
+                  setSteelTextWidthDraft={setSteelTextWidthDraft}
+                  steelTextObliqueDraft={steelTextObliqueDraft}
+                  setSteelTextObliqueDraft={setSteelTextObliqueDraft}
+                  steelTextRotationDraft={steelTextRotationDraft}
+                  setSteelTextRotationDraft={setSteelTextRotationDraft}
+                />
+              ) : null}
 
           {tab === 'concreto' ? (
-            <div className="form">
-              <div className="rowBetween">
-                <div className="muted"></div>
-              </div>
-
-              <div className="nameRow">
-                <label className="field nameField">
-                  <div className="label">Nombre</div>
-                  <input className="input" value={dev.name ?? ''} readOnly={true} />
-                </label>
-                <div className="nameActions">
-                  {(() => {
-                    const levelType = (((dev as any).level_type ?? 'piso') as string).toLowerCase() as LevelType;
-                    const pisos = Array.from({ length: 30 }, (_, i) => formatOrdinalEs(i + 1));
-                    return (
-                      <>
-                        <label className="field" style={{ width: 140 }}>
-                          <div className="label">Tipo</div>
-                          <select
-                            className="input"
-                            value={levelType}
-                            disabled={concretoLocked}
-                            onChange={(e) => updateDevPatch({ level_type: e.target.value as any } as any)}
-                          >
-                            <option value="sotano">Sótano</option>
-                            <option value="piso">Piso</option>
-                            <option value="azotea">Azotea</option>
-                          </select>
-                        </label>
-                        <label className="field" style={{ width: 120 }}>
-                          <div className="label">Número</div>
-                          <input
-                            className="input"
-                            type="number"
-                            min={1}
-                            step={1}
-                            value={String((dev as any).beam_no ?? 1)}
-                            disabled={concretoLocked}
-                            onChange={(e) => updateDevPatch({ beam_no: clampInt(e.target.value, (dev as any).beam_no ?? 1) } as any)}
-                          />
-                        </label>
-
-                        {levelType !== 'azotea' ? (
-                          <>
-                        <label className="field" style={{ width: 120 }}>
-                          <div className="label">Piso inicial</div>
-                          <select
-                            className="input"
-                            value={(dev as any).floor_start ?? '6to'}
-                            disabled={concretoLocked}
-                            onChange={(e) => updateDevPatch({ floor_start: e.target.value } as any)}
-                          >
-                            {pisos.map((p) => (
-                              <option key={`fs-${p}`} value={p}>
-                                {p}
-                              </option>
-                            ))}
-                          </select>
-                        </label>
-                        <label className="field" style={{ width: 120 }}>
-                          <div className="label">Piso final</div>
-                          <select
-                            className="input"
-                            value={(dev as any).floor_end ?? '9no'}
-                            disabled={concretoLocked}
-                            onChange={(e) => updateDevPatch({ floor_end: e.target.value } as any)}
-                          >
-                            {pisos.map((p) => (
-                              <option key={`fe-${p}`} value={p}>
-                                {p}
-                              </option>
-                            ))}
-                          </select>
-                        </label>
-                          </>
-                        ) : null}
-                      </>
-                    );
-                  })()}
-                  <button className="btnSmall" type="button" onClick={addSpan} disabled={concretoLocked}>
-                    Añadir Tramo
-                  </button>
-                  <button
-                    className="btnSmall"
-                    type="button"
-                    onClick={() => dxfInputRef.current?.click()}
-                    disabled={busy}
-                    title="Importar DXF (una viga)"
-                  >
-                    Importa DXF
-                  </button>
-                  <button className="btnSmall" type="button" onClick={clearDevelopment} disabled={busy} title="Reiniciar el desarrollo">
-                    Limpiar
-                  </button>
-                  <input
-                    ref={dxfInputRef}
-                    type="file"
-                    accept=".dxf"
-                    style={{ display: 'none' }}
-                    onChange={(e) => {
-                      const f = e.target.files?.[0];
-                      e.target.value = '';
-                      if (f) onImportDxfFile(f);
-                    }}
-                  />
-                  <label className="toggle toggleTight" title={concretoLocked ? 'Edición bloqueada' : 'Edición habilitada'}>
-                    <input type="checkbox" checked={concretoLocked} onChange={(e) => setConcretoLocked(e.target.checked)} />
-                    <span>{concretoLocked ? '🔒' : '🔓'}</span>
-                  </label>
-                  <label className="toggle toggleTight" title="Mostrar marcadores N/T">
-                    <input type="checkbox" checked={showNT} onChange={(e) => setShowNT(e.target.checked)} />
-                    <span>N/T</span>
-                  </label>
-                  <label className="toggle toggleTight" title="Correlación tablas ↔ gráfico (selección + zoom)">
-                    <input type="checkbox" checked={zoomEnabled} onChange={(e) => setZoomEnabled(e.target.checked)} />
-                    <span>Zoom</span>
-                  </label>
-                </div>
-              </div>
-
-              <div className="twoCol">
-                <div>
-                  <div className="sectionHeader">
-                    <div>Tramos</div>
-                  </div>
-
-                  <div className="matrix" style={{ gridTemplateColumns: `110px repeat(${(dev.spans ?? []).length}, 110px)` }}>
-                    <div className="cell head"></div>
-                    {(dev.spans ?? []).map((_, i) => (
-                      <div className={selection.kind === 'span' && selection.index === i ? 'cell head cellSelected' : 'cell head'} key={`span-head-${i}`}>
-                        <div className="colHead">
-                          <div className="mono">Tramo {i + 1}</div>
-                          <button className="btnX" type="button" title="Quitar tramo" onClick={() => removeSpan(i)} disabled={concretoLocked}>
-                            ✕
-                          </button>
-                        </div>
-                      </div>
-                    ))}
-
-                    <div className="cell rowLabel">L (m)</div>
-                    {(dev.spans ?? []).map((s, i) => (
-                      <div className={selection.kind === 'span' && selection.index === i ? 'cell cellSelected' : 'cell'} key={`span-L-${i}`}>
-                        <input
-                          className="cellInput"
-                          type="number"
-                          step="0.01"
-                          value={s.L}
-                          readOnly={concretoLocked}
-                          onChange={(e) => updateSpan(i, { L: clampNumber(e.target.value, s.L) })}
-                          onKeyDown={(e) => onGridKeyDown(e, 'spans', 0, i, 3, spansCols)}
-                          onFocus={(e) => {
-                            applySelection({ kind: 'span', index: i }, true);
-                            (e.target as HTMLInputElement).select?.();
-                          }}
-                          data-grid="spans"
-                          data-row={0}
-                          data-col={i}
-                        />
-                      </div>
-                    ))}
-
-                    <div className="cell rowLabel">h (m)</div>
-                    {(dev.spans ?? []).map((s, i) => (
-                      <div className={selection.kind === 'span' && selection.index === i ? 'cell cellSelected' : 'cell'} key={`span-h-${i}`}>
-                        <input
-                          className="cellInput"
-                          type="number"
-                          step="0.01"
-                          value={s.h}
-                          readOnly={concretoLocked}
-                          onChange={(e) => updateSpan(i, { h: clampNumber(e.target.value, s.h) })}
-                          onKeyDown={(e) => onGridKeyDown(e, 'spans', 1, i, 3, spansCols)}
-                          onFocus={(e) => {
-                            applySelection({ kind: 'span', index: i }, true);
-                            (e.target as HTMLInputElement).select?.();
-                          }}
-                          data-grid="spans"
-                          data-row={1}
-                          data-col={i}
-                        />
-                      </div>
-                    ))}
-
-                    <div className="cell rowLabel">b (m)</div>
-                    {(dev.spans ?? []).map((s, i) => (
-                      <div className={selection.kind === 'span' && selection.index === i ? 'cell cellSelected' : 'cell'} key={`span-b-${i}`}>
-                        <input
-                          className="cellInput"
-                          type="number"
-                          step="0.01"
-                          value={s.b ?? 0}
-                          readOnly={concretoLocked}
-                          onChange={(e) => updateSpan(i, { b: clampNumber(e.target.value, s.b ?? 0) })}
-                          onKeyDown={(e) => onGridKeyDown(e, 'spans', 2, i, 3, spansCols)}
-                          onFocus={(e) => {
-                            applySelection({ kind: 'span', index: i }, true);
-                            (e.target as HTMLInputElement).select?.();
-                          }}
-                          data-grid="spans"
-                          data-row={2}
-                          data-col={i}
-                        />
-                      </div>
-                    ))}
-                  </div>
-                </div>
-
-                <div>
-                  <div className="sectionHeader">
-                    <div>Nodos</div>
-                    <div className="mutedSmall">Nodos = Tramos + 1</div>
-                  </div>
-
-                  <div className="matrix" style={{ gridTemplateColumns: `110px repeat(${(dev.nodes ?? []).length}, 110px)` }}>
-                    <div className="cell head"></div>
-                    {(dev.nodes ?? []).map((_, i) => (
-                      <div className={selection.kind === 'node' && selection.index === i ? 'cell head cellSelected' : 'cell head'} key={`node-head-${i}`}>
-                        <div className="mono">Nodo {i + 1}</div>
-                      </div>
-                    ))}
-                    <div className="cell rowLabel">X1 superior (b1)</div>
-                    {(dev.nodes ?? []).map((n, i) => (
-                      <div className={selection.kind === 'node' && selection.index === i ? 'cell cellSelected' : 'cell'} key={`node-b1-${i}`}>
-                        <input
-                          className="cellInput"
-                          type="number"
-                          step="0.01"
-                          value={n.b1}
-                          readOnly={concretoLocked}
-                          onChange={(e) => updateNode(i, { b1: clampNumber(e.target.value, n.b1) })}
-                          onKeyDown={(e) => onGridKeyDown(e, 'nodes', 0, i, 5, nodesCols)}
-                          onFocus={(e) => {
-                            applySelection({ kind: 'node', index: i }, true);
-                            (e.target as HTMLInputElement).select?.();
-                          }}
-                          data-grid="nodes"
-                          data-row={0}
-                          data-col={i}
-                        />
-                      </div>
-                    ))}
-
-                    <div className="cell rowLabel">X2 superior (b2)</div>
-                    {(dev.nodes ?? []).map((n, i) => (
-                      <div className={selection.kind === 'node' && selection.index === i ? 'cell cellSelected' : 'cell'} key={`node-b2-${i}`}>
-                        <input
-                          className="cellInput"
-                          type="number"
-                          step="0.01"
-                          value={n.b2}
-                          readOnly={concretoLocked}
-                          onChange={(e) => updateNode(i, { b2: clampNumber(e.target.value, n.b2) })}
-                          onKeyDown={(e) => onGridKeyDown(e, 'nodes', 1, i, 5, nodesCols)}
-                          onFocus={(e) => {
-                            applySelection({ kind: 'node', index: i }, true);
-                            (e.target as HTMLInputElement).select?.();
-                          }}
-                          data-grid="nodes"
-                          data-row={1}
-                          data-col={i}
-                        />
-                      </div>
-                    ))}
-
-                    <div className="cell rowLabel">proj Superior</div>
-                    {(dev.nodes ?? []).map((n, i) => (
-                      <div className={selection.kind === 'node' && selection.index === i ? 'cell cellSelected' : 'cell'} key={`node-pb-${i}`}>
-                        <label className="check">
-                          <input
-                            type="checkbox"
-                            checked={n.project_b ?? true}
-                            disabled={concretoLocked}
-                            onChange={(e) => updateNode(i, { project_b: e.target.checked })}
-                            onKeyDown={(e) => onGridKeyDown(e as any, 'nodes', 2, i, 5, nodesCols)}
-                            onFocus={() => applySelection({ kind: 'node', index: i }, true)}
-                            data-grid="nodes"
-                            data-row={2}
-                            data-col={i}
-                          />
-                        </label>
-                      </div>
-                    ))}
-
-                    <div className="cell rowLabel">X2 inferior (a2)</div>
-                    {(dev.nodes ?? []).map((n, i) => (
-                      <div className={selection.kind === 'node' && selection.index === i ? 'cell cellSelected' : 'cell'} key={`node-a2-${i}`}>
-                        <input
-                          className="cellInput"
-                          type="number"
-                          step="0.01"
-                          value={n.a2}
-                          readOnly={concretoLocked}
-                          onChange={(e) => updateNode(i, { a2: clampNumber(e.target.value, n.a2) })}
-                          onKeyDown={(e) => onGridKeyDown(e, 'nodes', 3, i, 5, nodesCols)}
-                          onFocus={(e) => {
-                            applySelection({ kind: 'node', index: i }, true);
-                            (e.target as HTMLInputElement).select?.();
-                          }}
-                          data-grid="nodes"
-                          data-row={3}
-                          data-col={i}
-                        />
-                      </div>
-                    ))}
-
-                    <div className="cell rowLabel">proj Inferior</div>
-                    {(dev.nodes ?? []).map((n, i) => (
-                      <div className={selection.kind === 'node' && selection.index === i ? 'cell cellSelected' : 'cell'} key={`node-pa-${i}`}>
-                        <label className="check">
-                          <input
-                            type="checkbox"
-                            checked={n.project_a ?? true}
-                            disabled={concretoLocked}
-                            onChange={(e) => updateNode(i, { project_a: e.target.checked })}
-                            onKeyDown={(e) => onGridKeyDown(e as any, 'nodes', 4, i, 5, nodesCols)}
-                            onFocus={() => applySelection({ kind: 'node', index: i }, true)}
-                            data-grid="nodes"
-                            data-row={4}
-                            data-col={i}
-                          />
-                        </label>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              </div>
-
-              <div className="hint"></div>
-            </div>
+            <ConcreteTab
+              dev={dev}
+              selection={selection}
+              spansCols={spansCols}
+              nodesCols={nodesCols}
+              busy={busy}
+              concretoLocked={concretoLocked}
+              showNT={showNT}
+              setConcretoLocked={setConcretoLocked}
+              setShowNT={setShowNT}
+              clearDevelopment={clearDevelopment}
+              onImportDxfFile={onImportDxfFile}
+              onSave={handleSaveManual}
+              addSpan={addSpan}
+              removeSpan={removeSpan}
+              updateDevPatch={updateDevPatch}
+              updateSpan={updateSpan}
+              updateNode={updateNode}
+              applySelection={applySelection}
+              onGridKeyDown={onGridKeyDown}
+              formatOrdinalEs={formatOrdinalEs}
+              clampInt={clampInt}
+              clampNumber={clampNumber}
+              fmt2={fmt2}
+            />
           ) : null}
 
           {tab === 'acero' ? (
-            <div className="form">
-              <div className="muted">
-                <b>Acero corrido</b> (por tramo). Se dibuja en cyan en la Vista previa 2D.
-              </div>
-
-              <div>
-                <div className="sectionHeader">
-                  <div>Distribución en sección (E.060)</div>
-                  <div className="mutedSmall">Auto-optimizada (esquinas primero + simetría). Editable y persistible.</div>
-                </div>
-
-                {(() => {
-                  const s = getSteelLayoutSettings(dev);
-                  const dag = clampNumber((s as any).dag_cm ?? 2.5, 2.5);
-                  const maxRows = Math.max(1, Math.min(3, Math.round(clampNumber((s as any).max_rows_per_face ?? 3, 3))));
-                  const usePractical = Boolean((s as any).use_practical_min ?? true);
-                  const practicalMin = clampNumber((s as any).practical_min_cm ?? 4.0, 4.0);
-
-                  return (
-                    <>
-                      <div className="row" style={{ display: 'grid', gridTemplateColumns: '200px 160px 200px 160px', gap: 10, alignItems: 'center' }}>
-                        <div className="mutedSmall">Dag (cm)</div>
-                        <input
-                          className="cellInput"
-                          type="number"
-                          step="0.1"
-                          min={0.5}
-                          value={String(dag)}
-                          onChange={(e) => {
-                            const next = clampNumber(e.target.value, dag);
-                            updateDevPatch({ steel_layout_settings: { ...s, dag_cm: Math.max(0.5, next) } as any } as any);
-                          }}
-                        />
-
-                        <div className="mutedSmall">Máx. filas por cara</div>
-                        <input
-                          className="cellInput"
-                          type="number"
-                          step="1"
-                          min={1}
-                          max={3}
-                          value={String(maxRows)}
-                          onChange={(e) => {
-                            const next = Math.max(1, Math.min(3, Math.round(clampNumber(e.target.value, maxRows))));
-                            updateDevPatch({ steel_layout_settings: { ...s, max_rows_per_face: next } as any } as any);
-                          }}
-                        />
-                      </div>
-
-                      <div className="row" style={{ display: 'grid', gridTemplateColumns: '200px 1fr', gap: 10, alignItems: 'center', marginTop: 8 }}>
-                        <label className="check" style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}>
-                          <input
-                            type="checkbox"
-                            checked={usePractical}
-                            onChange={(e) => updateDevPatch({ steel_layout_settings: { ...s, use_practical_min: e.target.checked } as any } as any)}
-                          />
-                          <span className="mutedSmall">Aplicar mínimo práctico (≥ 4.0 cm)</span>
-                        </label>
-
-                        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                          <div className="mutedSmall">Mín. práctico (cm)</div>
-                          <input
-                            className="cellInput"
-                            style={{ maxWidth: 120 }}
-                            type="number"
-                            step="0.1"
-                            min={2.5}
-                            value={String(practicalMin)}
-                            disabled={!usePractical}
-                            onChange={(e) => {
-                              const next = clampNumber(e.target.value, practicalMin);
-                              updateDevPatch({ steel_layout_settings: { ...s, practical_min_cm: Math.max(2.5, next) } as any } as any);
-                            }}
-                          />
-                        </div>
-                      </div>
-
-                      <div style={{ marginTop: 10 }}>
-                        <div className="mutedSmall" style={{ marginBottom: 6 }}>
-                          Avanzado (JSON): reglas de columnas por ancho + tabla de diámetros reales (cm).
-                        </div>
-                        <textarea
-                          className="cellInput"
-                          style={{ width: '100%', minHeight: 160, fontFamily: 'ui-monospace, Menlo, Consolas, monospace' }}
-                          value={steelLayoutDraft}
-                          onChange={(e) => {
-                            steelLayoutDraftDirtyRef.current = true;
-                            setSteelLayoutDraft(e.target.value);
-                          }}
-                          onBlur={() => {
-                            const parsed = safeParseJson<SteelLayoutSettings>(steelLayoutDraft);
-                            steelLayoutDraftDirtyRef.current = false;
-                            if (!parsed.ok) {
-                              setWarning(`Layout JSON inválido: ${parsed.error}`);
-                              return;
-                            }
-                            setWarning(null);
-                            updateDevPatch({ steel_layout_settings: parsed.value as any } as any);
-                          }}
-                        />
-                      </div>
-                    </>
-                  );
-                })()}
-              </div>
-
-              <div>
-                <div className="sectionHeader">
-                  <div>Acero corrido por tramo</div>
-                  <div className="mutedSmall">Cantidad y diámetro por cada línea (sup/inf)</div>
-                </div>
-
-                <div className="matrix" style={{ gridTemplateColumns: `160px repeat(${(dev.spans ?? []).length}, 130px)` }}>
-                  <div className="cell head"></div>
-                  {(dev.spans ?? []).map((_, i) => (
-                    <div className={'cell head'} key={`steel-span-head-${i}`}>
-                      <div className="mono">Tramo {i + 1}</div>
-                    </div>
-                  ))}
-
-                  <div className="cell rowLabel">Superior: Cantidad</div>
-                  {(dev.spans ?? []).map((s, i) => (
-                    <div className="cell" key={`steel-top-qty-${i}`}>
-                      <input
-                        className="cellInput"
-                        type="number"
-                        step="1"
-                        min={1}
-                        value={(s.steel_top?.qty ?? 3) as any}
-                        onChange={(e) => updateSpanSteel(i, 'top', { qty: Math.max(1, clampNumber(e.target.value, s.steel_top?.qty ?? 3)) })}
-                      />
-                    </div>
-                  ))}
-
-                  <div className="cell rowLabel">Superior: Diámetro</div>
-                  {(dev.spans ?? []).map((s, i) => (
-                    <div className="cell" key={`steel-top-dia-${i}`}>
-                      <select
-                        className="cellInput"
-                        value={String(s.steel_top?.diameter ?? '3/4')}
-                        onChange={(e) => updateSpanSteel(i, 'top', { diameter: e.target.value })}
-                      >
-                        <option value="3/8">3/8</option>
-                        <option value="1/2">1/2</option>
-                        <option value="5/8">5/8</option>
-                        <option value="3/4">3/4</option>
-                        <option value="1">1</option>
-                      </select>
-                    </div>
-                  ))}
-
-                  <div className="cell rowLabel">Inferior: Cantidad</div>
-                  {(dev.spans ?? []).map((s, i) => (
-                    <div className="cell" key={`steel-bot-qty-${i}`}>
-                      <input
-                        className="cellInput"
-                        type="number"
-                        step="1"
-                        min={1}
-                        value={(s.steel_bottom?.qty ?? 3) as any}
-                        onChange={(e) => updateSpanSteel(i, 'bottom', { qty: Math.max(1, clampNumber(e.target.value, s.steel_bottom?.qty ?? 3)) })}
-                      />
-                    </div>
-                  ))}
-
-                  <div className="cell rowLabel">Inferior: Diámetro</div>
-                  {(dev.spans ?? []).map((s, i) => (
-                    <div className="cell" key={`steel-bot-dia-${i}`}>
-                      <select
-                        className="cellInput"
-                        value={String(s.steel_bottom?.diameter ?? '3/4')}
-                        onChange={(e) => updateSpanSteel(i, 'bottom', { diameter: e.target.value })}
-                      >
-                        <option value="3/8">3/8</option>
-                        <option value="1/2">1/2</option>
-                        <option value="5/8">5/8</option>
-                        <option value="3/4">3/4</option>
-                        <option value="1">1</option>
-                      </select>
-                    </div>
-                  ))}
-                </div>
-              </div>
-
-              <div>
-                <div className="sectionHeader">
-                  <div>Estribos en sección por tramo</div>
-                  <div className="mutedSmall">Rectangular concéntrico. Afecta el recubrimiento efectivo del layout.</div>
-                </div>
-
-                <div className="matrix" style={{ gridTemplateColumns: `160px repeat(${(dev.spans ?? []).length}, 130px)` }}>
-                  <div className="cell head"></div>
-                  {(dev.spans ?? []).map((_, i) => (
-                    <div className={'cell head'} key={`stsec-span-head-${i}`}>
-                      <div className="mono">Tramo {i + 1}</div>
-                    </div>
-                  ))}
-
-                  <div className="cell rowLabel">Cantidad (concéntricos)</div>
-                  {(dev.spans ?? []).map((s, i) => (
-                    <div className="cell" key={`stsec-qty-${i}`}>
-                      <input
-                        className="cellInput"
-                        type="number"
-                        step="1"
-                        min={0}
-                        value={(s as any).stirrups_section?.qty ?? 1}
-                        onChange={(e) => {
-                          const next = Math.max(0, Math.floor(clampNumber(e.target.value, (s as any).stirrups_section?.qty ?? 1)));
-                          updateSpanStirrupsSection(i, { qty: next });
-                        }}
-                      />
-                    </div>
-                  ))}
-
-                  <div className="cell rowLabel">Diámetro</div>
-                  {(dev.spans ?? []).map((s, i) => (
-                    <div className="cell" key={`stsec-dia-${i}`}>
-                      <select
-                        className="cellInput"
-                        value={String((s as any).stirrups_section?.diameter ?? '3/8')}
-                        onChange={(e) => updateSpanStirrupsSection(i, { diameter: e.target.value })}
-                      >
-                        <option value="3/8">3/8</option>
-                        <option value="1/2">1/2</option>
-                        <option value="5/8">5/8</option>
-                        <option value="3/4">3/4</option>
-                        <option value="1">1</option>
-                      </select>
-                    </div>
-                  ))}
-                </div>
-              </div>
-
-              <div>
-                <div className="sectionHeader">
-                  <div>Conexión en nodos (hacia el siguiente tramo)</div>
-                  <div className="mutedSmall">Continuo / Gancho / Anclaje (sup/inf)</div>
-                </div>
-
-                {(() => {
-                  const nodes = dev.nodes ?? [];
-                  const slots = buildNodeSlots(nodes);
-
-                  return (
-                    <div className="matrix" style={{ gridTemplateColumns: `200px repeat(${slots.length}, 110px)` }}>
-                      <div className="cell head"></div>
-                      {slots.map((s) => (
-                        <div className={'cell head'} key={`steel-node-head-${s.nodeIdx}-${s.end}`}>
-                          <div className="mono">{s.label}</div>
-                        </div>
-                      ))}
-
-                      <div className="cell rowLabel">Superior</div>
-                      {slots.map((s) => {
-                        const n = nodes[s.nodeIdx];
-                        const v = nodeSteelKind(n, 'top', s.end);
-                        const toFace = nodeToFaceEnabled(n, 'top', s.end);
-                        return (
-                          <div className="cell" key={`n-top-sel-${s.nodeIdx}-${s.end}`}>
-                            <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                              <select
-                                className="cellInput"
-                                value={v}
-                                onChange={(e) => setNodeSteelKind(s.nodeIdx, 'top', s.end, e.target.value as any)}
-                              >
-                                <option value="continuous">Continuo</option>
-                                <option value="hook">Gancho</option>
-                                <option value="development">Anclaje</option>
-                              </select>
-                              <label title="Ajustar gancho/anclaje a la cara del nodo" style={{ display: 'inline-flex', alignItems: 'center' }}>
-                                <input
-                                  type="checkbox"
-                                  checked={toFace}
-                                  disabled={v === 'continuous'}
-                                  onChange={(e) => setNodeToFace(s.nodeIdx, 'top', s.end, e.target.checked)}
-                                />
-                              </label>
-                            </div>
-                          </div>
-                        );
-                      })}
-
-                      <div className="cell rowLabel">Inferior</div>
-                      {slots.map((s) => {
-                        const n = nodes[s.nodeIdx];
-                        const v = nodeSteelKind(n, 'bottom', s.end);
-                        const toFace = nodeToFaceEnabled(n, 'bottom', s.end);
-                        return (
-                          <div className="cell" key={`n-bot-sel-${s.nodeIdx}-${s.end}`}>
-                            <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                              <select
-                                className="cellInput"
-                                value={v}
-                                onChange={(e) => setNodeSteelKind(s.nodeIdx, 'bottom', s.end, e.target.value as any)}
-                              >
-                                <option value="continuous">Continuo</option>
-                                <option value="hook">Gancho</option>
-                                <option value="development">Anclaje</option>
-                              </select>
-                              <label title="Ajustar gancho/anclaje a la cara del nodo" style={{ display: 'inline-flex', alignItems: 'center' }}>
-                                <input
-                                  type="checkbox"
-                                  checked={toFace}
-                                  disabled={v === 'continuous'}
-                                  onChange={(e) => setNodeToFace(s.nodeIdx, 'bottom', s.end, e.target.checked)}
-                                />
-                              </label>
-                            </div>
-                          </div>
-                        );
-                      })}
-                    </div>
-                  );
-                })()}
-              </div>
-
-              <div style={{ marginTop: 14 }}>
-                <div className="sectionHeader">
-                  <div>Conexión en nodos (Bastones Z1 / Z3)</div>
-                  <div className="mutedSmall">Configura el extremo en el nodo: *.1 → Z3, *.2 → Z1 (sup/inf)</div>
-                </div>
-
-                {(() => {
-                  const nodes = dev.nodes ?? [];
-                  const spans = dev.spans ?? [];
-                  const slots = buildNodeSlots(nodes);
-
-                  const zoneEnabledForSlot = (side: 'top' | 'bottom', s: NodeSlot) => {
-                    const spanIdx = s.end === 2 ? s.nodeIdx : s.nodeIdx - 1;
-                    const zone = s.end === 2 ? 'z1' : 'z3';
-                    const span = spans[spanIdx];
-                    if (!span) return false;
-                    const b = (span as any).bastones ?? {};
-                    const ss = (side === 'top' ? b.top : b.bottom) ?? {};
-                    const cfg = normalizeBastonCfg((ss as any)[zone]);
-                    return {
-                      l1: Boolean(cfg.l1_enabled),
-                      l2: Boolean(cfg.l2_enabled),
-                    };
-                  };
-
-                  const Cell = (props: {
-                    slot: NodeSlot;
-                    side: 'top' | 'bottom';
-                  }) => {
-                    const { slot, side } = props;
-                    const n = nodes[slot.nodeIdx];
-                    const enabled = zoneEnabledForSlot(side, slot);
-                    const v1 = nodeBastonLineKind(n, side, slot.end, 1);
-                    const v2 = nodeBastonLineKind(n, side, slot.end, 2);
-                    const tf1 = nodeBastonLineToFaceEnabled(n, side, slot.end, 1);
-                    const tf2 = nodeBastonLineToFaceEnabled(n, side, slot.end, 2);
-                    const rowStyle: React.CSSProperties = { display: 'flex', alignItems: 'center', gap: 6 };
-                    const labelStyle = (isEnabled: boolean): React.CSSProperties => ({
-                      width: 22,
-                      textAlign: 'right',
-                      opacity: isEnabled ? 0.9 : 0.5,
-                    });
-                    return (
-                      <div className="cell" key={`baston-${side}-sel-${slot.nodeIdx}-${slot.end}`}>
-                        <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-                          <div style={rowStyle}>
-                            <div style={labelStyle(enabled.l1)}>L1</div>
-                            <select
-                              className="cellInput"
-                              value={v1}
-                              disabled={!enabled.l1}
-                              onChange={(e) => setNodeBastonLineKind(slot.nodeIdx, side, slot.end, 1, e.target.value as any)}
-                            >
-                              <option value="continuous">Continuo</option>
-                              <option value="hook">Gancho</option>
-                              <option value="development">Anclaje</option>
-                            </select>
-                            <label title="Ajustar gancho/anclaje a la cara del nodo" style={{ display: 'inline-flex', alignItems: 'center' }}>
-                              <input
-                                type="checkbox"
-                                checked={tf1}
-                                disabled={!enabled.l1 || v1 === 'continuous'}
-                                onChange={(e) => setNodeBastonLineToFace(slot.nodeIdx, side, slot.end, 1, e.target.checked)}
-                              />
-                            </label>
-                          </div>
-
-                          <div style={rowStyle}>
-                            <div style={labelStyle(enabled.l2)}>L2</div>
-                            <select
-                              className="cellInput"
-                              value={v2}
-                              disabled={!enabled.l2}
-                              onChange={(e) => setNodeBastonLineKind(slot.nodeIdx, side, slot.end, 2, e.target.value as any)}
-                            >
-                              <option value="continuous">Continuo</option>
-                              <option value="hook">Gancho</option>
-                              <option value="development">Anclaje</option>
-                            </select>
-                            <label title="Ajustar gancho/anclaje a la cara del nodo" style={{ display: 'inline-flex', alignItems: 'center' }}>
-                              <input
-                                type="checkbox"
-                                checked={tf2}
-                                disabled={!enabled.l2 || v2 === 'continuous'}
-                                onChange={(e) => setNodeBastonLineToFace(slot.nodeIdx, side, slot.end, 2, e.target.checked)}
-                              />
-                            </label>
-                          </div>
-                        </div>
-                      </div>
-                    );
-                  };
-                  return (
-                    <div className="matrix" style={{ gridTemplateColumns: `200px repeat(${slots.length}, 180px)` }}>
-                      <div className="cell head"></div>
-                      {slots.map((s) => (
-                        <div className={'cell head'} key={`baston-node-head-${s.nodeIdx}-${s.end}`}>
-                          <div className="mono">{s.label}</div>
-                        </div>
-                      ))}
-
-                      <div className="cell rowLabel">Superior</div>
-                      {slots.map((s) => (
-                        <Cell slot={s} side="top" key={`baston-top-cell-${s.nodeIdx}-${s.end}`} />
-                      ))}
-
-                      <div className="cell rowLabel">Inferior</div>
-                      {slots.map((s) => (
-                        <Cell slot={s} side="bottom" key={`baston-bot-cell-${s.nodeIdx}-${s.end}`} />
-                      ))}
-                    </div>
-                  );
-                })()}
-              </div>
-
-              <div style={{ marginTop: 14 }}>
-                <div className="sectionHeader">
-                  <div>Bastones por zonas</div>
-                  <div className="mutedSmall">Z1/Z2/Z3 por tramo (sup/inf). L1= L/5 (Z1,Z3) y L/7 (Z2). Lc configurable en Config.</div>
-                </div>
-
-                {(() => {
-                  const spans = dev.spans ?? [];
-                  const nodes = dev.nodes ?? [];
-                  const Lc = clampNumber((dev as any).baston_Lc ?? appCfg.baston_Lc, appCfg.baston_Lc);
-
-                  const zoneLabel = (z: 'z1' | 'z2' | 'z3') => (z === 'z1' ? 'Zona 1' : z === 'z2' ? 'Zona 2' : 'Zona 3');
-
-                  const diameterOptions = (
-                    <>
-                      <option value="3/8">3/8</option>
-                      <option value="1/2">1/2</option>
-                      <option value="5/8">5/8</option>
-                      <option value="3/4">3/4</option>
-                      <option value="1">1</option>
-                    </>
-                  );
-
-                  const getCfg = (s: SpanIn, side: 'top' | 'bottom', zone: 'z1' | 'z2' | 'z3') => {
-                    const b = (s as any).bastones ?? {};
-                    const ss = (side === 'top' ? b.top : b.bottom) ?? {};
-                    return normalizeBastonCfg((ss as any)[zone]);
-                  };
-
-                  const mkLenKey = (spanIdx: number, side: 'top' | 'bottom', zone: 'z1' | 'z2' | 'z3', field: 'L1_m' | 'L2_m' | 'L3_m') =>
-                    `baston-len:${spanIdx}:${side}:${zone}:${field}`;
-
-                  const commitLen = (spanIdx: number, side: 'top' | 'bottom', zone: 'z1' | 'z2' | 'z3', field: 'L1_m' | 'L2_m' | 'L3_m', raw: string) => {
-                    const s = (raw ?? '').trim();
-                    const key = mkLenKey(spanIdx, side, zone, field);
-
-                    // vacío => volver a default (guardado como undefined)
-                    if (!s) {
-                      updateBaston(spanIdx, side, zone, { [field]: undefined } as any);
-                      setBastonLenEdits((prev) => {
-                        const next = { ...prev };
-                        delete next[key];
-                        return next;
-                      });
-                      return;
-                    }
-
-                    const v = clampNumber(s, NaN);
-                    if (!(Number.isFinite(v) && v > 0)) {
-                      // Si no parsea, no tocar el valor numérico guardado; solo limpiar el draft.
-                      setBastonLenEdits((prev) => {
-                        const next = { ...prev };
-                        delete next[key];
-                        return next;
-                      });
-                      return;
-                    }
-
-                    const normalized = snapBastonM(v);
-                    updateBaston(spanIdx, side, zone, { [field]: normalized } as any);
-                    setBastonLenEdits((prev) => {
-                      const next = { ...prev };
-                      delete next[key];
-                      return next;
-                    });
-                  };
-
-                  return (
-                    <div className="matrix" style={{ gridTemplateColumns: `240px repeat(${spans.length}, 1fr)` }}>
-                      <div className="cell head"></div>
-                      {spans.map((_, i) => (
-                        <div className={'cell head'} key={`baston-head-${i}`}>
-                          <div className="mono">Tramo {i + 1}</div>
-                        </div>
-                      ))}
-
-                      {(['top', 'bottom'] as const).flatMap((side) =>
-                        (['z1', 'z2', 'z3'] as const).map((zone) => {
-                          const rowKey = `${side}-${zone}`;
-                          const rowLabel = `${side === 'top' ? 'Superior' : 'Inferior'}: ${zoneLabel(zone)}`;
-                          return (
-                            <React.Fragment key={rowKey}>
-                              <div className="cell rowLabel">
-                                <div>{rowLabel}</div>
-                              </div>
-                              {spans.map((s, i) => {
-                                const cfg = getCfg(s, side, zone);
-                                const disabledAll = !cfg.l1_enabled && !cfg.l2_enabled;
-                                const L = clampNumber(s?.L ?? 0, 0);
-                                const def12 = snapBastonM(L / 5);
-                                const def3 = snapBastonM(L / 3);
-                                return (
-                                  <div className="cell" key={`baston-${rowKey}-${i}`}>
-                                    <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-                                      {([1, 2] as const).map((line) => {
-                                        const enabledKey = line === 1 ? 'l1_enabled' : 'l2_enabled';
-                                        const qtyKey = line === 1 ? 'l1_qty' : 'l2_qty';
-                                        const diaKey = line === 1 ? 'l1_diameter' : 'l2_diameter';
-                                        const enabled = Boolean((cfg as any)[enabledKey]);
-                                        return (
-                                          <div key={`baston-line-${rowKey}-${i}-${line}`} style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
-                                            <div className="mono" style={{ width: 26, opacity: enabled ? 0.9 : 0.5 }}>
-                                              L{line}
-                                            </div>
-
-                                            <label title="Habilitar línea">
-                                              <input
-                                                type="checkbox"
-                                                checked={enabled}
-                                                onChange={(e) => updateBaston(i, side, zone, { [enabledKey]: e.target.checked } as any)}
-                                              />
-                                            </label>
-
-                                            <select
-                                              className="cellInput"
-                                              value={String(Math.max(1, Math.min(3, Math.round(Number((cfg as any)[qtyKey] ?? 1)))))}
-                                              disabled={!enabled}
-                                              onChange={(e) => updateBaston(i, side, zone, { [qtyKey]: clampNumber(e.target.value, 1) } as any)}
-                                              style={{ width: 56 }}
-                                              title="Cantidad (1-3)"
-                                            >
-                                              <option value="1">1</option>
-                                              <option value="2">2</option>
-                                              <option value="3">3</option>
-                                            </select>
-
-                                            <select
-                                              className="cellInput"
-                                              value={String((cfg as any)[diaKey] ?? '3/4')}
-                                              disabled={!enabled}
-                                              onChange={(e) => updateBaston(i, side, zone, { [diaKey]: e.target.value } as any)}
-                                              style={{ width: 76 }}
-                                              title="Diámetro"
-                                            >
-                                              {diameterOptions}
-                                            </select>
-                                          </div>
-                                        );
-                                      })}
-
-                                      {zone === 'z2' ? (
-                                        <>
-                                          <input
-                                            className="cellInput"
-                                            style={{ width: 86 }}
-                                            type="text"
-                                            inputMode="decimal"
-                                            placeholder="L1"
-                                            disabled={disabledAll}
-                                            value={
-                                              bastonLenEdits[mkLenKey(i, side, zone, 'L1_m')] ??
-                                              (cfg.L1_m == null ? fmt2(def12) : fmt2(snapBastonM(cfg.L1_m)))
-                                            }
-                                            onChange={(e) => setBastonLenEdits((p) => ({ ...p, [mkLenKey(i, side, zone, 'L1_m')]: e.target.value }))}
-                                            onBlur={(e) => commitLen(i, side, zone, 'L1_m', e.target.value)}
-                                            title="L1 (m)"
-                                          />
-                                          <input
-                                            className="cellInput"
-                                            style={{ width: 86 }}
-                                            type="text"
-                                            inputMode="decimal"
-                                            placeholder="L2"
-                                            disabled={disabledAll}
-                                            value={
-                                              bastonLenEdits[mkLenKey(i, side, zone, 'L2_m')] ??
-                                              (cfg.L2_m == null ? fmt2(def12) : fmt2(snapBastonM(cfg.L2_m)))
-                                            }
-                                            onChange={(e) => setBastonLenEdits((p) => ({ ...p, [mkLenKey(i, side, zone, 'L2_m')]: e.target.value }))}
-                                            onBlur={(e) => commitLen(i, side, zone, 'L2_m', e.target.value)}
-                                            title="L2 (m)"
-                                          />
-                                        </>
-                                      ) : (
-                                        <input
-                                          className="cellInput"
-                                          style={{ width: 86 }}
-                                          type="text"
-                                          inputMode="decimal"
-                                          placeholder="L3"
-                                          disabled={disabledAll}
-                                          value={
-                                            bastonLenEdits[mkLenKey(i, side, zone, 'L3_m')] ?? (cfg.L3_m == null ? fmt2(def3) : fmt2(snapBastonM(cfg.L3_m)))
-                                          }
-                                          onChange={(e) => setBastonLenEdits((p) => ({ ...p, [mkLenKey(i, side, zone, 'L3_m')]: e.target.value }))}
-                                          onBlur={(e) => commitLen(i, side, zone, 'L3_m', e.target.value)}
-                                          title="L3 (m)"
-                                        />
-                                      )}
-                                    </div>
-                                  </div>
-                                );
-                              })}
-                            </React.Fragment>
-                          );
-                        })
-                      )}
-                    </div>
-                  );
-                })()}
-              </div>
-
-              <div style={{ marginTop: 14 }}>
-                <div className="sectionHeader">
-                  <div>Estribos (por tramo)</div>
-                  <div className="mutedSmall">Parámetros: A, b,B, c,C, R (por extremo)</div>
-                </div>
-
-                {(() => {
-                  const spans = dev.spans ?? [];
-                  const getSt = (s: SpanIn) => (s as any).stirrups ?? {};
-                  const caseTypeOf = (st: any) => String(st.case_type ?? 'simetrica');
-                  const singleEndOf = (st: any) => String(st.single_end ?? '');
-                  const modeOf = (st: any) => {
-                    const v = String(st.design_mode ?? 'sismico').trim().toLowerCase();
-                    return v === 'gravedad' ? 'gravedad' : 'sismico';
-                  };
-
-                  const fmt = (v: number | undefined | null) => (typeof v === 'number' && Number.isFinite(v) ? v.toFixed(2) : '');
-                  const fmtInt = (v: number | undefined | null) => (typeof v === 'number' && Number.isFinite(v) ? String(Math.max(0, Math.round(v))) : '');
-
-                  const mkAbcrKey = (spanIdx: number, side: 'L' | 'R', field: 'A' | 'b' | 'B' | 'c' | 'C' | 'R') => `stABCR:${spanIdx}:${side}:${field}`;
-
-                  const defaultSpecTextFor = (span: SpanIn, mode: 'sismico' | 'gravedad') => {
-                    const h = clampNumber((span as any).h ?? 0.5, 0.5);
-                    return formatStirrupsABCR(pickDefaultABCRForH(h, mode));
-                  };
-
-                  const getSpecKeyForSide = (ct: string, side: 'L' | 'R') => {
-                    const ctt = String(ct || '').trim().toLowerCase();
-                    if (ctt === 'asim_uno') {
-                      // UI: L = Especial (left_spec), R = Resto (center_spec)
-                      return side === 'L' ? ('left_spec' as const) : ('center_spec' as const);
-                    }
-                    // simetrica / asim_ambos / fallback
-                    return side === 'L' ? ('left_spec' as const) : ('right_spec' as const);
-                  };
-
-                  const getABCR = (st: any, key: 'left_spec' | 'center_spec' | 'right_spec'): StirrupsABCR => {
-                    const parsed = parseStirrupsABCR(String(st?.[key] ?? '').trim());
-                    return (
-                      parsed ??
-                      ({
-                        A_m: 0,
-                        b_n: 0,
-                        B_m: 0,
-                        c_n: 0,
-                        C_m: 0,
-                        R_m: 0,
-                      } as StirrupsABCR)
-                    );
-                  };
-
-                  const setABCRField = (
-                    spanIdx: number,
-                    st: any,
-                    ct: string,
-                    side: 'L' | 'R',
-                    field: 'A' | 'b' | 'B' | 'c' | 'C' | 'R',
-                    raw: string
-                  ) => {
-                    const specKey = getSpecKeyForSide(ct, side);
-                    const cur = getABCR(st, specKey);
-
-                    const s = String(raw ?? '').trim().replace(',', '.');
-                    if (!s) {
-                      // limpiar draft; mantener valor previo
-                      setStirrupsAbcrEdits((p) => {
-                        const k = mkAbcrKey(spanIdx, side, field);
-                        const { [k]: _, ...rest } = p;
-                        return rest;
-                      });
-                      return;
-                    }
-
-                    let next = { ...cur };
-                    if (field === 'b' || field === 'c') {
-                      const n = Number.parseInt(s, 10);
-                      if (!Number.isFinite(n)) return;
-                      if (field === 'b') next.b_n = Math.max(0, n);
-                      else next.c_n = Math.max(0, n);
-                    } else {
-                      const n = Number.parseFloat(s);
-                      if (!Number.isFinite(n)) return;
-                      if (field === 'A') next.A_m = Math.max(0, n);
-                      if (field === 'B') next.B_m = Math.max(0, n);
-                      if (field === 'C') next.C_m = Math.max(0, n);
-                      if (field === 'R') next.R_m = Math.max(0, n);
-                    }
-
-                    const specText = formatStirrupsABCR(next);
-                    if (ct === 'simetrica') {
-                      // En simétrica, espejo: ambos extremos usan el mismo spec.
-                      updateSpanStirrups(spanIdx, { left_spec: specText, right_spec: specText } as any);
-                    } else {
-                      updateSpanStirrups(spanIdx, { [specKey]: specText } as any);
-                    }
-
-                    // limpiar draft al commitear
-                    setStirrupsAbcrEdits((p) => {
-                      const k = mkAbcrKey(spanIdx, side, field);
-                      const { [k]: _, ...rest } = p;
-                      return rest;
-                    });
-                  };
-
-                  return (
-                    <div className="matrix" style={{ gridTemplateColumns: `210px repeat(${spans.length}, 280px)` }}>
-                      <div className="cell head"></div>
-                      {spans.map((_, i) => (
-                        <div className={'cell head'} key={`stirrups-head-${i}`}>
-                          <div className="mono">Tramo {i + 1}</div>
-                        </div>
-                      ))}
-
-                      <div className="cell rowLabel">Diámetro</div>
-                      {spans.map((s, i) => {
-                        const st = getSt(s);
-                        const dia = normalizeDiaKey(String(st.diameter ?? '3/8').replace(/[∅Ø\s]/g, '')) || '3/8';
-                        return (
-                          <div className="cell" key={`st-dia-${i}`}>
-                            <select
-                              className="cellInput"
-                              value={dia}
-                              onChange={(e) => updateSpanStirrups(i, { diameter: e.target.value } as any)}
-                            >
-                              <option value="3/8">3/8</option>
-                              <option value="1/2">1/2</option>
-                              <option value="5/8">5/8</option>
-                              <option value="3/4">3/4</option>
-                              <option value="1">1</option>
-                            </select>
-                          </div>
-                        );
-                      })}
-
-                      <div className="cell rowLabel">Caso</div>
-                      {spans.map((s, i) => {
-                        const st = getSt(s);
-                        return (
-                          <div className="cell" key={`st-case-${i}`}>
-                            <select
-                              className="cellInput"
-                              value={caseTypeOf(st)}
-                              onChange={(e) => updateSpanStirrups(i, { case_type: e.target.value as any })}
-                            >
-                              <option value="simetrica">Simétrica</option>
-                              <option value="asim_ambos">Asim (ambos)</option>
-                              <option value="asim_uno">Asim (uno)</option>
-                            </select>
-                          </div>
-                        );
-                      })}
-
-                      <div className="cell rowLabel">Modo</div>
-                      {spans.map((s, i) => {
-                        const st = getSt(s);
-                        const ct = String(caseTypeOf(st) || '').trim().toLowerCase();
-                        const cur = modeOf(st) as 'sismico' | 'gravedad';
-                        return (
-                          <div className="cell" key={`st-mode-${i}`}>
-                            <select
-                              className="cellInput"
-                              value={cur}
-                              onChange={(e) => {
-                                const m = (String(e.target.value || '').toLowerCase() === 'gravedad' ? 'gravedad' : 'sismico') as any;
-                                const spec = defaultSpecTextFor(s, m);
-                                if (ct === 'asim_uno') {
-                                  updateSpanStirrups(i, { design_mode: m, left_spec: spec, center_spec: spec, right_spec: null } as any);
-                                } else {
-                                  updateSpanStirrups(i, { design_mode: m, left_spec: spec, right_spec: spec, center_spec: null } as any);
-                                }
-                              }}
-                            >
-                              <option value="sismico">Sísmico</option>
-                              <option value="gravedad">Gravedad</option>
-                            </select>
-                          </div>
-                        );
-                      })}
-
-                      <div className="cell rowLabel">Single end</div>
-                      {spans.map((s, i) => {
-                        const st = getSt(s);
-                        const ct = caseTypeOf(st);
-                        return (
-                          <div className="cell" key={`st-single-${i}`}>
-                            <select
-                              className="cellInput"
-                              value={singleEndOf(st)}
-                              disabled={ct !== 'asim_uno'}
-                              onChange={(e) => updateSpanStirrups(i, { single_end: e.target.value ? (e.target.value as any) : null })}
-                            >
-                              <option value="">—</option>
-                              <option value="left">Left</option>
-                              <option value="right">Right</option>
-                            </select>
-                          </div>
-                        );
-                      })}
-
-                      {/* ABCR por extremo: cada fila tiene inputs Izq/Der (o Especial/Resto en asim_uno) */}
-                      {(
-                        [
-                          { f: 'A' as const, label: 'A (m)', ph: '0.05', isInt: false },
-                          { f: 'b' as const, label: 'b (cant)', ph: '8', isInt: true },
-                          { f: 'B' as const, label: 'B (m)', ph: '0.10', isInt: false },
-                          { f: 'c' as const, label: 'c (cant)', ph: '5', isInt: true },
-                          { f: 'C' as const, label: 'C (m)', ph: '0.15', isInt: false },
-                          { f: 'R' as const, label: 'R (m)', ph: '0.25', isInt: false },
-                        ] as const
-                      ).map((row) => (
-                        <React.Fragment key={`st-abcr-row-${row.f}`}>
-                          <div className="cell rowLabel">{row.label}</div>
-                          {spans.map((s, si) => {
-                            const st = getSt(s);
-                            const ct = String(caseTypeOf(st) || '').trim().toLowerCase();
-                            const leftKey = getSpecKeyForSide(ct, 'L');
-                            const rightKey = getSpecKeyForSide(ct, 'R');
-                            const abL = getABCR(st, leftKey);
-                            const abR = getABCR(st, rightKey);
-
-                            const sideLabelL = ct === 'asim_uno' ? 'Especial' : 'Izq';
-                            const sideLabelR = ct === 'asim_uno' ? 'Resto' : 'Der';
-
-                            const valueFor = (ab: StirrupsABCR) => {
-                              if (row.f === 'A') return fmt(ab.A_m);
-                              if (row.f === 'b') return fmtInt(ab.b_n);
-                              if (row.f === 'B') return fmt(ab.B_m);
-                              if (row.f === 'c') return fmtInt(ab.c_n);
-                              if (row.f === 'C') return fmt(ab.C_m);
-                              return fmt(ab.R_m);
-                            };
-
-                            const kL = mkAbcrKey(si, 'L', row.f);
-                            const kR = mkAbcrKey(si, 'R', row.f);
-
-                            const disabledR = ct === 'simetrica';
-
-                            return (
-                              <div className="cell" key={`st-abcr-${row.f}-${si}`}>
-                                <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-                                  <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
-                                    <span className="mutedSmall" style={{ minWidth: 56 }}>{sideLabelL}</span>
-                                    <input
-                                      className="cellInput"
-                                      style={{ width: 86 }}
-                                      type="text"
-                                      inputMode={row.isInt ? 'numeric' : 'decimal'}
-                                      placeholder={row.ph}
-                                      value={stirrupsAbcrEdits[kL] ?? valueFor(abL)}
-                                      onChange={(e) => setStirrupsAbcrEdits((p) => ({ ...p, [kL]: e.target.value }))}
-                                      onBlur={(e) => setABCRField(si, st, ct, 'L', row.f, e.target.value)}
-                                    />
-                                  </div>
-                                  <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
-                                    <span className="mutedSmall" style={{ minWidth: 42 }}>{sideLabelR}</span>
-                                    <input
-                                      className="cellInput"
-                                      style={{ width: 86 }}
-                                      type="text"
-                                      inputMode={row.isInt ? 'numeric' : 'decimal'}
-                                      placeholder={row.ph}
-                                      disabled={disabledR}
-                                      value={stirrupsAbcrEdits[kR] ?? valueFor(abR)}
-                                      onChange={(e) => setStirrupsAbcrEdits((p) => ({ ...p, [kR]: e.target.value }))}
-                                      onBlur={(e) => setABCRField(si, st, ct, 'R', row.f, e.target.value)}
-                                    />
-                                  </div>
-                                </div>
-                              </div>
-                            );
-                          })}
-                        </React.Fragment>
-                      ))}
-                    </div>
-                  );
-                })()}
-              </div>
-            </div>
+            <SteelTab
+              dev={dev}
+              appCfg={appCfg}
+              steelLayoutDraft={steelLayoutDraft}
+              setSteelLayoutDraft={setSteelLayoutDraft}
+              steelLayoutDraftDirtyRef={steelLayoutDraftDirtyRef}
+              warning={warning}
+              setWarning={setWarning}
+              updateDevPatch={updateDevPatch}
+              bastonLenEdits={bastonLenEdits}
+              setBastonLenEdits={setBastonLenEdits}
+              stirrupsAbcrEdits={stirrupsAbcrEdits}
+              setStirrupsAbcrEdits={setStirrupsAbcrEdits}
+              updateSpanSteel={updateSpanSteel}
+              updateSpanStirrupsSection={updateSpanStirrupsSection}
+              updateSpanStirrups={updateSpanStirrups}
+              updateBaston={updateBaston}
+              nodeSteelKind={nodeSteelKind}
+              setNodeSteelKind={setNodeSteelKind}
+              nodeToFaceEnabled={nodeToFaceEnabled}
+              setNodeToFace={setNodeToFace}
+              buildNodeSlots={buildNodeSlots}
+              nodeBastonLineKind={nodeBastonLineKind}
+              setNodeBastonLineKind={setNodeBastonLineKind}
+              nodeBastonLineToFaceEnabled={nodeBastonLineToFaceEnabled}
+              setNodeBastonLineToFace={setNodeBastonLineToFace}
+              normalizeBastonCfg={normalizeBastonCfg}
+              snapBastonM={snapBastonM}
+              parseStirrupsABCR={parseStirrupsABCR}
+              formatStirrupsABCR={formatStirrupsABCR}
+              pickDefaultABCRForH={pickDefaultABCRForH}
+              normalizeDiaKey={normalizeDiaKey}
+              safeParseJson={safeParseJson}
+              getSteelLayoutSettings={getSteelLayoutSettings}
+              clampNumber={clampNumber}
+              fmt2={fmt2}
+            />
           ) : null}
 
           {tab === 'json' ? (
@@ -6782,198 +4613,50 @@ export default function App() {
             </div>
           ) : null}
 
-          {busy ? <div className="mutedSmall">Procesando…</div> : null}
-          {warning ? <div className="warning">{warning}</div> : null}
-          {error ? <div className="error">{error}</div> : null}
-        </section>
+              {busy ? <div className="mutedSmall">Procesando…</div> : null}
+              {warning ? <div className="warning">{warning}</div> : null}
+              {error ? <div className="error">{error}</div> : null}
+            </details>
+          </div>
 
-        {tab !== 'config' ? (
-          <section className="panel">
-            <div className="rowBetween" style={{ marginBottom: 8 }}>
-              <div className="panelTitle" style={{ marginBottom: 0 }}>Vista previa</div>
-              <div className="segmented" aria-label="Vista previa 2D/3D">
-                <button
-                  className={previewView === '2d' ? 'segBtn segBtnActive' : 'segBtn'}
-                  onClick={() => setPreviewView('2d')}
-                  type="button"
-                >
-                  2D
-                </button>
-                <button
-                  className={previewView === '3d' ? 'segBtn segBtnActive' : 'segBtn'}
-                  onClick={() => setPreviewView('3d')}
-                  type="button"
-                >
-                  3D
-                </button>
-              </div>
-            </div>
-
-            <div className="row" style={{ display: 'flex', gap: 14, alignItems: 'center', flexWrap: 'wrap', marginBottom: 10 }}>
-              <label className="check" style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}>
-                <input type="checkbox" checked={showLongitudinal} onChange={(e) => setShowLongitudinal(e.target.checked)} />
-                <span className="mutedSmall">Longitudinal</span>
-              </label>
-              <label className="check" style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}>
-                <input type="checkbox" checked={showStirrups} onChange={(e) => setShowStirrups(e.target.checked)} />
-                <span className="mutedSmall">Estribos</span>
-              </label>
-
-              {previewView === '3d' ? (
-                <div className="segmented" aria-label="Proyección 3D">
-                  <button
-                    className={threeProjection === 'perspective' ? 'segBtn segBtnActive' : 'segBtn'}
-                    onClick={() => setThreeProjection('perspective')}
-                    type="button"
-                    title="Cámara en perspectiva"
-                  >
-                    Perspectiva
-                  </button>
-                  <button
-                    className={threeProjection === 'orthographic' ? 'segBtn segBtnActive' : 'segBtn'}
-                    onClick={() => setThreeProjection('orthographic')}
-                    type="button"
-                    title="Cámara ortográfica"
-                  >
-                    Ortográfica
-                  </button>
-                </div>
-              ) : null}
-            </div>
-
-            <div style={{ display: 'flex', gap: 12, alignItems: 'stretch' }}>
-              <div style={{ flex: 1, minWidth: 0 }}>
-                {previewView === '2d' ? (
-                  <canvas
-                    ref={canvasRef}
-                    width={900}
-                    height={300}
-                    className="canvas"
-                    style={{ touchAction: 'none' }}
-                    onWheel={onCanvasWheel}
-                    onPointerDown={onCanvasPointerDown}
-                    onPointerMove={onCanvasPointerMove}
-                    onPointerUp={onCanvasPointerUp}
-                    onPointerCancel={onCanvasPointerUp}
-                    onDoubleClick={() => setViewport(null)}
-                    onContextMenu={(e) => e.preventDefault()}
-                    onClick={onCanvasClick}
-                    title="2D: rueda = zoom, arrastrar = pan, doble click = reset"
-                  />
-                ) : null}
-                {previewView === '3d' ? <div ref={threeHostRef} className="canvas3d" /> : null}
-              </div>
-
-              {previewView === '2d' && tab === 'acero' ? (
-                <div style={{ width: 260, display: 'flex', flexDirection: 'column', gap: 8 }}>
-                  <div className="rowBetween" style={{ gap: 8 }}>
-                    <div className="mutedSmall">Sección (corte en desarrollo)</div>
-                    <button
-                      className="btnSmall"
-                      type="button"
-                      onClick={() =>
-                        setSavedCuts((p) => {
-                          const xmin = sectionXRangeU.xmin;
-                          const xmax = sectionXRangeU.xmax;
-                          const x = Math.min(xmax, Math.max(xmin, sectionXU));
-                          const xA = defaultCutAXU;
-
-                          const next = (p.length ? [...p] : [{ xU: xA }]).concat([{ xU: x }]);
-
-                          // De-dup (mantener A y no permitir duplicados en B/C/..)
-                          const eps = 1e-6;
-                          const out: Array<{ xU: number }> = [];
-                          for (let i = 0; i < next.length; i++) {
-                            const xi = next[i].xU;
-                            if (i === 0) {
-                              out.push({ xU: xi });
-                              continue;
-                            }
-                            if (Math.abs(out[0].xU - xi) < eps) continue;
-                            if (out.slice(1).some((c) => Math.abs(c.xU - xi) < eps)) continue;
-                            out.push({ xU: xi });
-                          }
-
-                          return out;
-                        })
-                      }
-                      title="Guardar este corte"
-                    >
-                      Guardar
-                    </button>
-                  </div>
-
-                  <input
-                    className="input"
-                    type="range"
-                    min={sectionXRangeU.xmin}
-                    max={sectionXRangeU.xmax}
-                    step={mToUnits(dev, 0.05)}
-                    value={sectionXU}
-                    onChange={(e) => setSectionXU(Number(e.target.value))}
-                    title="Desliza para cambiar el corte a lo largo del desarrollo"
-                  />
-
-                  <div className="rowBetween" style={{ gap: 8 }}>
-                    <div className="mutedSmall">Tramo {sectionInfo.spanIndex + 1} | x={sectionInfo.x_m.toFixed(2)} m</div>
-                    <div className="mutedSmall">{(sectionXRangeU.xmax / (dev.unit_scale ?? 2)).toFixed(2)} m</div>
-                  </div>
-
-                  <canvas
-                    ref={sectionCanvasRef}
-                    width={240}
-                    height={240}
-                    className="canvas"
-                    style={{ height: 240 }}
-                    title="Corte (solo acero): amarillo = principal, verde = bastones activos"
-                  />
-
-                  {savedCuts.length ? (
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-                      {savedCuts.map((c, i) => {
-                        const label = indexToLetters(i);
-                        const si = Math.max(0, Math.min(spanIndexAtX(dev, c.xU), (dev.spans ?? []).length - 1));
-                        const xm = c.xU / (dev.unit_scale ?? 2);
-                        return (
-                          <div key={`cut-${i}`} className="rowBetween" style={{ gap: 8 }}>
-                            <button
-                              type="button"
-                              className="btnSmall"
-                              onClick={() => setSectionXU(c.xU)}
-                              title="Ir al corte"
-                              style={{ flex: 1, textAlign: 'left' as any }}
-                            >
-                              Corte {label} — Tramo {si + 1} | x={xm.toFixed(2)} m
-                            </button>
-                            <button
-                              type="button"
-                              className="btnSmall"
-                              onClick={() => setSavedCuts((p) => (i === 0 ? p : p.filter((_, j) => j !== i)))}
-                              disabled={i === 0}
-                              title={i === 0 ? 'Corte A es automático' : 'Eliminar corte'}
-                            >
-                              Eliminar
-                            </button>
-                          </div>
-                        );
-                      })}
-                    </div>
-                  ) : null}
-                </div>
-              ) : null}
-            </div>
-
-            <div className="meta">
-              <div>
-                <span className="mono">Spans:</span> {(dev.spans ?? []).length}
-              </div>
-              <div>
-                <span className="mono">Nodes:</span> {(dev.nodes ?? []).length}
-              </div>
-            </div>
-            {!preview ? <div className="mutedSmall">Sin preview (revisa backend).</div> : null}
-          </section>
-        ) : null}
+          <PreviewPanel
+            preview={preview}
+            previewView={previewView}
+            setPreviewView={setPreviewView}
+            threeProjection={threeProjection}
+            setThreeProjection={setThreeProjection}
+            dev={dev}
+            overviewCanvasRef={overviewCanvasRef}
+            canvasRef={canvasRef}
+            sectionCanvasRef={sectionCanvasRef}
+            threeHostRef={threeHostRef}
+            onOverviewCanvasClick={onOverviewCanvasClick}
+            onCanvasWheel={onCanvasWheel}
+            onCanvasPointerDown={onCanvasPointerDown}
+            onCanvasPointerMove={onCanvasPointerMove}
+            onCanvasPointerUp={onCanvasPointerUp}
+            onCanvasClick={onCanvasClick}
+            moveZoomSelection={moveZoomSelection}
+            setDetailViewport={setDetailViewport}
+            showLongitudinal={showLongitudinal}
+            setShowLongitudinal={setShowLongitudinal}
+            showStirrups={showStirrups}
+            setShowStirrups={setShowStirrups}
+            steelViewActive={steelViewActive}
+            steelYScale2={steelYScale2}
+            setSteelYScale2={setSteelYScale2}
+            savedCuts={savedCuts}
+            setSavedCuts={setSavedCuts}
+            sectionXU={sectionXU}
+            setSectionXU={setSectionXU}
+            sectionXRangeU={sectionXRangeU}
+            sectionInfo={sectionInfo}
+            defaultCutAXU={defaultCutAXU}
+            mToUnits={mToUnits}
+            spanIndexAtX={spanIndexAtX}
+            indexToLetters={indexToLetters}
+          />
+        </div>
       </main>
     </div>
   );

@@ -1,5 +1,7 @@
 export type SteelKind = 'continuous' | 'hook' | 'development';
 
+export type SupportType = 'columna_inferior' | 'columna_superior' | 'placa' | 'apoyo_intermedio' | 'ninguno';
+
 export type NodeIn = {
   a1?: number;
   a2: number;
@@ -7,6 +9,7 @@ export type NodeIn = {
   b2: number;
   project_a?: boolean;
   project_b?: boolean;
+  support_type?: SupportType; // Tipo de apoyo para calcular longitudes de acero
 
   // Ajuste de gancho/anclaje a la cara del nodo (por extremo).
   // Si está activo, el tramo de desarrollo/hook se recorta hasta la cara opuesta del nodo.
@@ -195,6 +198,21 @@ export type SpanIn = {
   bastones?: BastonesCfg;
 };
 
+/**
+ * Viga transversal (perpendicular al desarrollo principal).
+ *
+ * Se lee desde la capa 'VIGAS' en el DXF template.
+ * - La longitud de la línea en DXF = ancho (b)
+ * - El peralte (h) se toma del tramo donde está ubicada
+ * - Se dibuja perpendicular al desarrollo en 3D (1.00m de longitud)
+ */
+export type Crossbeam = {
+  x: number;  // Posición X en metros
+  b: number;  // Ancho en metros
+  h: number;  // Peralte en metros
+  span_index: number;  // Índice del tramo
+};
+
 export type DevelopmentIn = {
   name?: string;
   nodes: NodeIn[];
@@ -219,6 +237,9 @@ export type DevelopmentIn = {
 
   // Config global de layout para sección (E.060 + reglas de columnas)
   steel_layout_settings?: SteelLayoutSettings;
+
+  // Vigas transversales (perpendiculares al desarrollo)
+  crossbeams?: Crossbeam[];
 };
 
 export type PreviewRequest = {
