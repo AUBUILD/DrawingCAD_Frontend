@@ -1135,16 +1135,16 @@ function drawCrossbeamsOverlay(
       const b_u = mToUnits(dev, cb.b);
       const h_u = mToUnits(dev, cb.h);
 
-      // El ancho se extiende en dirección Y (perpendicular al desarrollo)
+      // El ancho (b) se extiende en dirección X, centrado en x_u
       const half_b = b_u / 2.0;
       const y_bottom = y0;
       const y_top = y0 + h_u;
 
       // Cuatro esquinas del rectángulo
-      const [px1, py1] = toCanvas(x_u, y_bottom - half_b);
-      const [px2, py2] = toCanvas(x_u, y_top - half_b);
-      const [px3, py3] = toCanvas(x_u, y_top + half_b);
-      const [px4, py4] = toCanvas(x_u, y_bottom + half_b);
+      const [px1, py1] = toCanvas(x_u - half_b, y_bottom);
+      const [px2, py2] = toCanvas(x_u + half_b, y_bottom);
+      const [px3, py3] = toCanvas(x_u + half_b, y_top);
+      const [px4, py4] = toCanvas(x_u - half_b, y_top);
 
       // Dibujar rectángulo
       ctx.beginPath();
@@ -1169,6 +1169,7 @@ export default function App() {
   const [showLongitudinal, setShowLongitudinal] = useState(true);
   const [showStirrups, setShowStirrups] = useState(true);
   const [steelYScale2, setSteelYScale2] = useState(false);
+  const [threeOpacity, setThreeOpacity] = useState(20);
   const [steelViewPinned, setSteelViewPinned] = useState(false);
   const [selection, setSelection] = useState<Selection>({ kind: 'none' });
   const [detailViewport, setDetailViewport] = useState<Bounds | null>(null);
@@ -1956,6 +1957,7 @@ export default function App() {
     const spans = dev.spans ?? [];
     const nodes = dev.nodes ?? [];
     const origins = computeNodeOrigins(dev);
+    const marginU = mToUnits(dev, 0.50);
     let xmin = Number.POSITIVE_INFINITY;
     let xmax = Number.NEGATIVE_INFINITY;
     for (let i = 0; i < spans.length; i++) {
@@ -1964,16 +1966,16 @@ export default function App() {
       if (!span || !(Lm > 0)) continue;
 
       const a2_i = mToUnits(dev, clampNumber(nodes[i]?.a2 ?? 0, 0));
-      const xBot0 = (origins[i] ?? 0) + a2_i;
-      const xBot1 = xBot0 + mToUnits(dev, Lm);
+      const xFaceLeft = (origins[i] ?? 0) + a2_i;
+      const xFaceRight = xFaceLeft + mToUnits(dev, Lm);
 
-      const b2_i = mToUnits(dev, clampNumber(nodes[i]?.b2 ?? 0, 0));
-      const b1_ip1 = mToUnits(dev, clampNumber(nodes[i + 1]?.b1 ?? 0, 0));
-      const xTop0 = (origins[i] ?? 0) + b2_i;
-      const xTop1 = (origins[i + 1] ?? 0) + b1_ip1;
-
-      xmin = Math.min(xmin, xBot0, xBot1, xTop0, xTop1);
-      xmax = Math.max(xmax, xBot0, xBot1, xTop0, xTop1);
+      // Solo rango válido dentro del tramo (0.50m desde cada apoyo)
+      const xStart = xFaceLeft + marginU;
+      const xEnd = xFaceRight - marginU;
+      if (xEnd > xStart + 1e-6) {
+        xmin = Math.min(xmin, xStart);
+        xmax = Math.max(xmax, xEnd);
+      }
     }
 
     if (!Number.isFinite(xmin) || !Number.isFinite(xmax) || !(xmax > xmin)) {
@@ -2914,8 +2916,10 @@ export default function App() {
       for (const [y0, y1] of intervals) {
         const dy = y1 - y0;
         if (!(dy > 1e-6)) continue;
-        const geom = new THREE.BoxGeometry(dx, dy, b);
+        const bU = mToUnits(dev, b);
+        const geom = new THREE.BoxGeometry(dx, dy, bU);
         const mesh = new THREE.Mesh(geom, baseMat.clone());
+        mesh.userData.__casco = true;
         mesh.position.set((x0 + x1) / 2, (y0 + y1) / 2, 0);
         parent.add(mesh);
       }
@@ -2943,6 +2947,7 @@ export default function App() {
           mat.opacity = 0.35; // Ligeramente más opaco para distinguir
 
           const mesh = new THREE.Mesh(geom, mat);
+          mesh.userData.__casco = true;
 
           // Posicionar en X, centrado verticalmente en h/2
           const yBaseU = mToUnits(dev, clampNumber((dev as any).y0 ?? 0, 0));
@@ -3509,7 +3514,7 @@ export default function App() {
                 const addLoopAtX = (xPos: number, mat: THREE.Material) => {
                   if (xPos < x0Face - 1e-3 || xPos > x1Face + 1e-3) return;
                   if (!(sec.qty > 0) || !(dbU > 1e-9)) return;
-                  const bU = spanBAtX(dev, xPos);
+                  const bU = mToUnits(dev, spanBAtX(dev, xPos));
 
                   for (let k = 0; k < sec.qty; k++) {
                     const offU = coverU + (k + 0.5) * dbU;
@@ -3762,6 +3767,22 @@ export default function App() {
     for (const g of [...(state.spanSteel ?? []), ...(state.nodeSteel ?? [])]) g.visible = showLongitudinal;
     for (const g of [...(state.spanStirrups ?? []), ...(state.nodeStirrups ?? [])]) g.visible = showStirrups;
   }, [showLongitudinal, showStirrups, previewView]);
+
+  // Aplicar opacidad (transparencia) a todos los materiales 3D
+  useEffect(() => {
+    if (previewView !== '3d') return;
+    const state = threeRef.current;
+    if (!state) return;
+    const opacity = threeOpacity / 100;
+    state.root.traverse((obj: any) => {
+      if (obj.isMesh && obj.material && obj.userData?.__casco) {
+        const mat = obj.material;
+        mat.transparent = true;
+        mat.opacity = opacity;
+        mat.needsUpdate = true;
+      }
+    });
+  }, [threeOpacity, previewView, dev, preview]);
 
   // Highlight 3D por selección
   useEffect(() => {
@@ -4475,20 +4496,6 @@ export default function App() {
                           <option value="personalizado">Personalizado</option>
                         </select>
                       </label>
-                      {defaultPref === 'basico' ? (
-                        <button
-                          className="btnSmall"
-                          type="button"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            console.log('🔄 Re-aplicando Preferencia 01: Básico...');
-                            applyBasicoPreference();
-                          }}
-                          title="Re-aplicar configuración de Preferencia 01: acero 2Ø5/8, anclajes 75cm superior y 60cm inferior"
-                        >
-                          ⚡ Aplicar
-                        </button>
-                      ) : null}
                     </div>
                   ) : null}
                 </div>
@@ -4565,6 +4572,7 @@ export default function App() {
             <SteelTab
               dev={dev}
               appCfg={appCfg}
+              defaultPref={defaultPref}
               steelLayoutDraft={steelLayoutDraft}
               setSteelLayoutDraft={setSteelLayoutDraft}
               steelLayoutDraftDirtyRef={steelLayoutDraftDirtyRef}
@@ -4645,6 +4653,8 @@ export default function App() {
             steelViewActive={steelViewActive}
             steelYScale2={steelYScale2}
             setSteelYScale2={setSteelYScale2}
+            threeOpacity={threeOpacity}
+            setThreeOpacity={setThreeOpacity}
             savedCuts={savedCuts}
             setSavedCuts={setSavedCuts}
             sectionXU={sectionXU}

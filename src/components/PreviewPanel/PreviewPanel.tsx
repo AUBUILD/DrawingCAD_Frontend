@@ -58,6 +58,8 @@ export interface PreviewPanelProps {
   steelViewActive: boolean;
   steelYScale2: boolean;
   setSteelYScale2: (scale: boolean) => void;
+  threeOpacity: number;
+  setThreeOpacity: (opacity: number) => void;
 
   // Section cuts
   savedCuts: SavedCut[];
@@ -109,6 +111,8 @@ export const PreviewPanel: React.FC<PreviewPanelProps> = ({
   steelViewActive,
   steelYScale2,
   setSteelYScale2,
+  threeOpacity,
+  setThreeOpacity,
   savedCuts,
   setSavedCuts,
   sectionXU,
@@ -206,6 +210,20 @@ export const PreviewPanel: React.FC<PreviewPanelProps> = ({
                   onChange={(e) => setSteelYScale2(e.target.checked)}
                 />
                 <span className="mutedSmall">Escala Y x2</span>
+              </label>
+            ) : null}
+            {previewView === '3d' ? (
+              <label style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+                <span className="mutedSmall">Transparencia</span>
+                <input
+                  type="range"
+                  min={0}
+                  max={100}
+                  value={threeOpacity}
+                  onChange={(e) => setThreeOpacity(Number(e.target.value))}
+                  style={{ width: 90 }}
+                />
+                <span className="mutedSmall" style={{ minWidth: 30, textAlign: 'right' }}>{threeOpacity}%</span>
               </label>
             ) : null}
           </div>

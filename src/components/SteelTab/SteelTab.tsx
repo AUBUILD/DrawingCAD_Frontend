@@ -52,6 +52,7 @@ export interface SteelTabProps {
   // Data
   dev: DevelopmentIn;
   appCfg: any;
+  defaultPref: 'basico' | 'personalizado';
 
   // Draft states
   steelLayoutDraft: string;
@@ -113,6 +114,7 @@ export interface SteelTabProps {
 export const SteelTab: React.FC<SteelTabProps> = ({
   dev,
   appCfg,
+  defaultPref,
   steelLayoutDraft,
   setSteelLayoutDraft,
   steelLayoutDraftDirtyRef,
@@ -149,10 +151,13 @@ export const SteelTab: React.FC<SteelTabProps> = ({
 }) => {
   return (
     <div className="form">
+      {defaultPref !== 'basico' ? (
       <div className="muted">
         <b>Acero corrido</b> (por tramo). Se dibuja en cyan en la Vista previa 2D.
       </div>
+      ) : null}
 
+      {defaultPref !== 'basico' ? (
       <div>
         <div className="sectionHeader">
           <div>Distribución en sección (E.060)</div>
@@ -253,6 +258,7 @@ export const SteelTab: React.FC<SteelTabProps> = ({
           );
         })()}
       </div>
+      ) : null}
 
       <div>
         <div className="sectionHeader">
@@ -260,6 +266,7 @@ export const SteelTab: React.FC<SteelTabProps> = ({
           <div className="mutedSmall">Cantidad y diámetro por cada línea (sup/inf)</div>
         </div>
 
+        <div className="tableContainer"><div className="tableScroll">
         <div className="matrix" style={{ gridTemplateColumns: `160px repeat(${(dev.spans ?? []).length}, 130px)` }}>
           <div className="cell head"></div>
           {(dev.spans ?? []).map((_, i) => (
@@ -330,6 +337,7 @@ export const SteelTab: React.FC<SteelTabProps> = ({
             </div>
           ))}
         </div>
+        </div></div>
       </div>
 
       <div>
@@ -338,6 +346,7 @@ export const SteelTab: React.FC<SteelTabProps> = ({
           <div className="mutedSmall">Rectangular concéntrico. Afecta el recubrimiento efectivo del layout.</div>
         </div>
 
+        <div className="tableContainer"><div className="tableScroll">
         <div className="matrix" style={{ gridTemplateColumns: `160px repeat(${(dev.spans ?? []).length}, 130px)` }}>
           <div className="cell head"></div>
           {(dev.spans ?? []).map((_, i) => (
@@ -380,6 +389,7 @@ export const SteelTab: React.FC<SteelTabProps> = ({
             </div>
           ))}
         </div>
+        </div></div>
       </div>
 
       <div>
@@ -393,6 +403,7 @@ export const SteelTab: React.FC<SteelTabProps> = ({
           const slots = buildNodeSlots(nodes);
 
           return (
+            <div className="tableContainer"><div className="tableScroll">
             <div className="matrix" style={{ gridTemplateColumns: `200px repeat(${slots.length}, 110px)` }}>
               <div className="cell head"></div>
               {slots.map((s) => (
@@ -463,6 +474,7 @@ export const SteelTab: React.FC<SteelTabProps> = ({
                 );
               })}
             </div>
+            </div></div>
           );
         })()}
       </div>
@@ -561,6 +573,7 @@ export const SteelTab: React.FC<SteelTabProps> = ({
             );
           };
           return (
+            <div className="tableContainer"><div className="tableScroll">
             <div className="matrix" style={{ gridTemplateColumns: `200px repeat(${slots.length}, 180px)` }}>
               <div className="cell head"></div>
               {slots.map((s) => (
@@ -579,6 +592,7 @@ export const SteelTab: React.FC<SteelTabProps> = ({
                 <Cell slot={s} side="bottom" key={`baston-bot-cell-${s.nodeIdx}-${s.end}`} />
               ))}
             </div>
+            </div></div>
           );
         })()}
       </div>
@@ -651,6 +665,7 @@ export const SteelTab: React.FC<SteelTabProps> = ({
           };
 
           return (
+            <div className="tableContainer"><div className="tableScroll">
             <div className="matrix" style={{ gridTemplateColumns: `240px repeat(${spans.length}, 1fr)` }}>
               <div className="cell head"></div>
               {spans.map((_, i) => (
@@ -781,6 +796,7 @@ export const SteelTab: React.FC<SteelTabProps> = ({
                 })
               )}
             </div>
+            </div></div>
           );
         })()}
       </div>
@@ -890,6 +906,7 @@ export const SteelTab: React.FC<SteelTabProps> = ({
           };
 
           return (
+            <div className="tableContainer"><div className="tableScroll">
             <div className="matrix" style={{ gridTemplateColumns: `210px repeat(${spans.length}, 280px)` }}>
               <div className="cell head"></div>
               {spans.map((_, i) => (
@@ -1059,6 +1076,7 @@ export const SteelTab: React.FC<SteelTabProps> = ({
                 </React.Fragment>
               ))}
             </div>
+            </div></div>
           );
         })()}
       </div>
