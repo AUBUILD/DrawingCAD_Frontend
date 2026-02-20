@@ -1,5 +1,6 @@
 :root {
   color-scheme: dark;
+  --cut-color: rgb(249, 115, 22);
 }
 
 body {
@@ -13,6 +14,7 @@ body {
   display: flex;
   flex-direction: column;
   min-height: 100vh;
+  height: 100vh;
 }
 
 .header {
@@ -45,6 +47,7 @@ body {
   border-radius: 12px;
   overflow: hidden;
   background: rgba(0,0,0,0.18);
+  width: 100%;
 }
 
 .segBtn {
@@ -55,6 +58,8 @@ body {
   cursor: pointer;
   font-weight: 700;
   font-size: 12px;
+  flex: 1 1 0;
+  text-align: center;
 }
 
 .segBtnActive {
@@ -93,6 +98,11 @@ body {
   font-size: 12px;
 }
 
+.cutBtn {
+  font-size: 11px;
+  font-weight: 700;
+}
+
 .btnIcon {
   width: 34px;
   height: 34px;
@@ -123,15 +133,119 @@ body {
   flex-direction: column;
   gap: 12px;
   padding: 12px;
+  flex: 1;
+  min-height: 0;
+}
+
+.mainGrid {
+  display: grid;
+  grid-template-columns: minmax(0, 400px) minmax(0, 1fr);
+  gap: 8px;
+  align-items: start;
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.leftPane,
+.rightPane {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-width: 0;
+  min-height: 0;
+  max-width: 100%;
+}
+
+.leftPane {
+  overflow: hidden;
+}
+
+@media (max-width: 1000px) {
+  .mainGrid {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* Alturas fijas para evitar que el canvas cambie con el layout */
+:root {
+  --overview-h: 190px;
+  --detail-h: 460px;
+}
+
+.overviewCanvas {
+  height: var(--overview-h);
+}
+
+.overviewCanvas3d {
+  height: var(--overview-h);
+}
+
+.detailCanvas {
+  height: var(--detail-h);
+}
+
+.detailCanvas3d {
+  height: var(--detail-h);
 }
 
 .panel {
   border: 1px solid rgba(255, 255, 255, 0.08);
-  border-radius: 14px;
+  border-radius: 8px;
   background: rgba(255, 255, 255, 0.03);
-  padding: 12px;
+  padding: 10px;
   display: flex;
   flex-direction: column;
+  overflow: hidden;
+  max-width: 100%;
+  min-width: 0;
+  width: 93%;
+}
+
+/* Panel específico para VISTA GENERAL */
+.panelOverview {
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.03);
+  padding: 10px;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  max-width: 100%;
+  min-width: 0;
+  width: 98%;
+  min-height: calc(var(--overview-h) + 60px);
+}
+
+/* Panel específico para DETALLE DE VISTA */
+.panelDetail {
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.03);
+  padding: 10px;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  max-width: 100%;
+  min-width: 0;
+  width: 98%;
+  min-height: calc(var(--detail-h) + 100px);
+}
+
+.panelSummary {
+  list-style: none;
+  cursor: pointer;
+}
+
+.panelSummary::-webkit-details-marker {
+  display: none;
+}
+
+.panelSummaryInner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
 }
 
 .panelTitle {
@@ -143,7 +257,18 @@ body {
 
 .form {
   display: grid;
-  gap: 10px;
+  gap: 8px;
+  min-width: 0;
+  max-width: 100%;
+  overflow-x: hidden;
+  overflow-y: auto;
+  max-height: 75vh;
+  width: 100%;
+}
+
+.form > * {
+  min-width: 0;
+  max-width: 100%;
 }
 
 .rowBetween {
@@ -151,6 +276,10 @@ body {
   align-items: center;
   justify-content: space-between;
   gap: 10px;
+  flex-wrap: wrap;
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
 }
 
 .muted {
@@ -179,18 +308,78 @@ body {
   display: flex;
   align-items: flex-end;
   gap: 10px;
-}
-
-.nameField {
-  flex: 1;
+  flex-wrap: wrap;
+  width: 100%;
+  max-width: 100%;
   min-width: 0;
 }
 
+.nameField {
+  flex: 1 1 auto;
+  min-width: 150px;
+  max-width: 100%;
+}
+
 .nameActions {
-  display: inline-flex;
+  display: flex;
   align-items: center;
   gap: 8px;
   padding-bottom: 2px;
+  flex-wrap: wrap;
+  width: 100%;
+  min-width: 0;
+  max-width: 100%;
+}
+
+.fieldGroup {
+  display: inline-flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  flex: 1 1 auto;
+  min-width: 0;
+  max-width: 100%;
+}
+
+.nameActions .field {
+  flex: 1 1 auto;
+  min-width: 100px;
+  max-width: 200px;
+}
+
+.actionRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  flex-wrap: wrap;
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
+}
+
+.actionButtons {
+  flex-wrap: wrap;
+  max-width: 100%;
+  width: 100%;
+  justify-content: flex-start;
+}
+
+.actionButtons {
+  display: inline-flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  width: 100%;
+}
+
+.actionButtons > .btnSmall,
+.actionButtons > .btnSecondary,
+.actionButtons > .btn {
+  flex: 0 1 auto;
+  min-width: 100px;
+}
+
+.actionButtons > .toggle {
+  flex: 0 0 auto;
 }
 
 .field {
@@ -212,6 +401,10 @@ body {
   color: #e5e7eb;
   padding: 9px 10px;
   font-size: 12px;
+}
+
+input[type="range"].input {
+  accent-color: var(--cut-color);
 }
 
 .input:focus {
@@ -254,7 +447,8 @@ body {
   align-items: baseline;
   justify-content: space-between;
   gap: 10px;
-  margin-top: 6px;
+  margin-top: 12px;
+  margin-bottom: 8px;
   font-weight: 800;
   font-size: 12px;
 }
@@ -281,12 +475,52 @@ body {
   display: grid;
   border: 1px solid rgba(255, 255, 255, 0.08);
   border-radius: 12px;
-  width: 100%;
-  max-width: 100%;
-  overflow-x: auto;
-  overflow-y: hidden;
+  width: max-content;
+  min-width: 100%;
+  overflow: hidden;
   scrollbar-gutter: stable;
   background: rgba(0,0,0,0.14);
+}
+
+.tableScroll {
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
+  overflow-x: auto;
+  overflow-y: hidden;
+  box-sizing: border-box;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(255, 255, 255, 0.3) rgba(0, 0, 0, 0.2);
+}
+
+.tableScroll::-webkit-scrollbar {
+  height: 8px;
+}
+
+.tableScroll::-webkit-scrollbar-track {
+  background: rgba(0, 0, 0, 0.2);
+  border-radius: 4px;
+}
+
+.tableScroll::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.3);
+  border-radius: 4px;
+}
+
+.tableScroll::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 255, 255, 0.4);
+}
+
+.tableContainer {
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
+  box-sizing: border-box;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 12px;
+  padding: 4px;
+  background: rgba(0,0,0,0.14);
+  overflow: visible;
 }
 
 .twoCol {
@@ -322,9 +556,12 @@ body {
   background: rgba(255,255,255,0.03);
   font-weight: 800;
   opacity: 0.85;
-  min-width: 110px;
+  min-width: 80px;
   padding: 6px 8px;
   font-size: 12px;
+  position: sticky;
+  left: 0;
+  z-index: 2;
 }
 
 .cellInput {
@@ -362,17 +599,18 @@ body {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 10px;
+  gap: 6px;
 }
 
 .btnX {
-  width: 28px;
-  height: 28px;
+  width: 24px;
+  height: 24px;
   border-radius: 10px;
   border: 1px solid rgba(255,255,255,0.12);
   background: rgba(0,0,0,0.18);
   color: rgba(229,231,235,0.9);
   cursor: pointer;
+  font-size: 12px;
 }
 
 .thead,
@@ -439,17 +677,40 @@ body {
   cursor: grab;
 }
 
+/*
+  IMPORTANTE:
+  El canvas tiene un ratio intrínseco por sus atributos width/height.
+  Con `width:100%` + `height:auto`, el navegador mantiene ese ratio y la altura
+  sube/baja según el ancho del panel. Para que las vistas tengan altura fija,
+  sobre-escribimos con selectores más específicos.
+*/
+.canvas.overviewCanvas {
+  height: var(--overview-h);
+}
+
+.canvas.detailCanvas {
+  height: var(--detail-h);
+}
+
 .canvas:active {
   cursor: grabbing;
 }
 
 .canvas3d {
   width: 100%;
-  height: 280px;
+  height: auto;
   border-radius: 12px;
   border: 1px solid rgba(255, 255, 255, 0.10);
   background: rgba(0,0,0,0.18);
   overflow: hidden;
+}
+
+.canvas3d.overviewCanvas3d {
+  height: var(--overview-h);
+}
+
+.canvas3d.detailCanvas3d {
+  height: var(--detail-h);
 }
 
 .canvas3d > canvas {
