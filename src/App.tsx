@@ -20,13 +20,14 @@ import type {
 } from './types';
 
 import { computeSpanSectionLayoutWithBastonesCm, diameterToCm, getSteelLayoutSettings } from './steelLayout';
-import { applyBasicPreferenceToNodes, applyBasicPreferenceToSpans } from './services/steelService';
+import { applyBasicPreferenceToNodes, applyBasicPreferenceToSpans, applyBasicBastonesPreferenceToSpans, applyBasicBastonesPreferenceToNodes } from './services/steelService';
 import { useDebounce } from './hooks';
 import { AppProvider, useAppState, useAppActions } from './context';
 import { ConfigTab } from './components/ConfigTab';
 import { ConcreteTab } from './components/ConcreteTab';
 import { SteelTab } from './components/SteelTab';
 import { PreviewPanel } from './components/PreviewPanel';
+import { SteelOverlay, type SteelOverlayLayer } from './components/SteelOverlay';
 import {
   // Geometry
   mToUnits,
@@ -1177,6 +1178,7 @@ export default function App() {
   const detailViewportRef = useRef<Bounds | null>(detailViewport);
 
   const steelViewActive = tab === 'acero' || steelViewPinned;
+  const [steelOverlayLayer, setSteelOverlayLayer] = useState<SteelOverlayLayer | null>(null);
 
   useEffect(() => {
     // Una vez que el usuario entra a Acero, mantener esa vista activa aunque cambie
@@ -1310,9 +1312,42 @@ export default function App() {
       // Aplicar configuración a spans (acero corrido 2Ø5/8")
       const updatedSpans = applyBasicPreferenceToSpans([...currentSpans]);
 
-      console.log('✓ Preferencia 01: Básico aplicada a', updatedNodes.length, 'nodos y', updatedSpans.length, 'tramos (geometría preservada)');
-
       // Retornar sin normalizar para no afectar la geometría
+      return { ...prev, nodes: updatedNodes, spans: updatedSpans };
+    });
+  };
+
+  const applyBasicoBastonesPreference = () => {
+    const hasExistingGeometry = (dev.nodes ?? []).length > 0 || (dev.spans ?? []).length > 0;
+
+    if (!hasExistingGeometry) {
+      // Mismos defaults globales que Pref 01
+      setAppCfg((p) => ({
+        ...p,
+        d: 0.25,
+        unit_scale: 2,
+        x0: 0,
+        y0: 0,
+        recubrimiento: 0.04,
+        baston_Lc: 0.45,
+      }));
+      setHookLegDraft('0.15');
+      setSlabProjOffsetDraft('0.20');
+      setSlabProjLayerDraft('-- SECCION CORTE');
+      setCascoLayer('-- SECCION CORTE');
+      setSteelLayer('FIERRO');
+      return;
+    }
+
+    setDev((prev) => {
+      const currentNodes = prev.nodes ?? [];
+      const currentSpans = prev.spans ?? [];
+      if (currentNodes.length === 0) return prev;
+
+      // Pref 02: acero corrido + bastones + nodo bastones
+      const updatedNodes = applyBasicBastonesPreferenceToNodes([...currentNodes]);
+      const updatedSpans = applyBasicBastonesPreferenceToSpans([...currentSpans]);
+
       return { ...prev, nodes: updatedNodes, spans: updatedSpans };
     });
   };
@@ -1332,12 +1367,10 @@ export default function App() {
         recubrimiento: p.appCfg.recubrimiento,
         baston_Lc: p.appCfg.baston_Lc,
       }));
-      console.log('✓ Preferencia Personalizado aplicada (geometría preservada, solo parámetros de dibujo actualizados)');
     } else {
       // Si NO hay geometría, aplicar toda la configuración
       setAppCfg(p.appCfg);
       setDev(normalizeDev(p.dev, p.appCfg));
-      console.log('✓ Preferencia Personalizado aplicada (geometría cargada desde guardado)');
     }
 
     // Aplicar drafts y exportOpts (no afectan geometría)
@@ -1359,6 +1392,10 @@ export default function App() {
     setDefaultPref(next);
     if (next === 'basico') {
       applyBasicoPreference();
+      return;
+    }
+    if (next === 'basico_bastones') {
+      applyBasicoBastonesPreference();
       return;
     }
     const stored = readPersonalizado();
@@ -1547,15 +1584,16 @@ export default function App() {
           };
           setAppCfg(nextCfg);
 
-          // Aplicar Preferencia 01 ANTES de normalizar si la preferencia es 'basico'
+          // Aplicar preferencia ANTES de normalizar
           let finalIncoming = incoming;
-          if (defaultPref === 'basico') {
-            console.log('📋 Aplicando Preferencia 01: Básico a viga cargada...');
+          if (defaultPref === 'basico' || defaultPref === 'basico_bastones') {
+            const applyNodes = defaultPref === 'basico_bastones' ? applyBasicBastonesPreferenceToNodes : applyBasicPreferenceToNodes;
+            const applySpans = defaultPref === 'basico_bastones' ? applyBasicBastonesPreferenceToSpans : applyBasicPreferenceToSpans;
             const updatedNodes = incoming.nodes && incoming.nodes.length > 0
-              ? applyBasicPreferenceToNodes([...incoming.nodes])
+              ? applyNodes([...incoming.nodes])
               : incoming.nodes;
             const updatedSpans = incoming.spans && incoming.spans.length > 0
-              ? applyBasicPreferenceToSpans([...incoming.spans])
+              ? applySpans([...incoming.spans])
               : incoming.spans;
             finalIncoming = { ...incoming, nodes: updatedNodes, spans: updatedSpans };
           }
@@ -1569,7 +1607,9 @@ export default function App() {
         if (cancelled) return;
         if (loaded) return;
         // Si no hay estado persistido, aplicar preferencia por defecto.
-        if (defaultPref === 'basico') {
+        if (defaultPref === 'basico_bastones') {
+          applyBasicoBastonesPreference();
+        } else if (defaultPref === 'basico') {
           applyBasicoPreference();
         } else {
           applyPersonalizadoPreference(readPersonalizado());
@@ -4244,15 +4284,16 @@ export default function App() {
       let spans = [...spans0, cloneSpan(lastSpan)];
       let nodes = [...nodes0, cloneNode(lastNode)];
 
-      // Si la preferencia es 'basico', aplicar configuración de acero en todos los nodos y spans
-      if (defaultPref === 'basico') {
+      // Aplicar preferencia de acero en nodos y spans
+      if (defaultPref === 'basico' || defaultPref === 'basico_bastones') {
+        const applyN = defaultPref === 'basico_bastones' ? applyBasicBastonesPreferenceToNodes : applyBasicPreferenceToNodes;
+        const applyS = defaultPref === 'basico_bastones' ? applyBasicBastonesPreferenceToSpans : applyBasicPreferenceToSpans;
         if (nodes.length > 0) {
-          nodes = applyBasicPreferenceToNodes(nodes);
+          nodes = applyN(nodes);
         }
         if (spans.length > 0) {
-          spans = applyBasicPreferenceToSpans(spans);
+          spans = applyS(spans);
         }
-        console.log('✓ Preferencia 01: Básico aplicada después de añadir tramo');
       }
 
       return normalizeDev({ ...prev, spans, nodes } as DevelopmentIn, appCfg);
@@ -4356,20 +4397,21 @@ export default function App() {
         spans: (res.development.spans ?? []).map((s) => ({ ...s, h: h0, b: b0 })),
       };
 
-      // Si la preferencia es 'basico', aplicar configuración de acero en nodos y spans
-      if (defaultPref === 'basico') {
+      // Aplicar preferencia de acero en nodos y spans
+      if (defaultPref === 'basico' || defaultPref === 'basico_bastones') {
+        const applyN = defaultPref === 'basico_bastones' ? applyBasicBastonesPreferenceToNodes : applyBasicPreferenceToNodes;
+        const applyS = defaultPref === 'basico_bastones' ? applyBasicBastonesPreferenceToSpans : applyBasicPreferenceToSpans;
         let updatedNodes = incoming.nodes;
         let updatedSpans = incoming.spans;
 
         if (incoming.nodes && incoming.nodes.length > 0) {
-          updatedNodes = applyBasicPreferenceToNodes([...incoming.nodes]);
+          updatedNodes = applyN([...incoming.nodes]);
         }
         if (incoming.spans && incoming.spans.length > 0) {
-          updatedSpans = applyBasicPreferenceToSpans([...incoming.spans]);
+          updatedSpans = applyS([...incoming.spans]);
         }
 
         incoming = { ...incoming, nodes: updatedNodes, spans: updatedSpans };
-        console.log('✓ Preferencia 01: Básico aplicada a DXF importado -', updatedNodes?.length || 0, 'nodos,', updatedSpans?.length || 0, 'tramos');
       }
 
       setDev(normalizeDev(incoming, appCfg));
@@ -4440,7 +4482,24 @@ export default function App() {
           </div>
         )}
 
-        <div className="actions">
+        <div className="actions" style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
+          <div className="steelLayerSelector">
+            {([
+              { key: null, label: 'Off' },
+              { key: 'acero' as SteelOverlayLayer, label: 'Acero' },
+              { key: 'bastones' as SteelOverlayLayer, label: 'Bastones' },
+              { key: 'estribos' as SteelOverlayLayer, label: 'Estribos' },
+            ] as const).map(({ key, label }) => (
+              <button
+                key={label}
+                className={`steelLayerBtn ${steelOverlayLayer === key ? 'steelLayerBtnActive' : ''}`}
+                onClick={() => setSteelOverlayLayer(key)}
+                type="button"
+              >
+                {label}
+              </button>
+            ))}
+          </div>
           <button className="btn" onClick={onExportDxf} type="button" disabled={busy}>
             Exportar DXF
           </button>
@@ -4493,6 +4552,7 @@ export default function App() {
                           onPointerDown={(e) => e.stopPropagation()}
                         >
                           <option value="basico">Preferencia 01: Básico</option>
+                          <option value="basico_bastones">Preferencia 02: Básico + Bastones</option>
                           <option value="personalizado">Personalizado</option>
                         </select>
                       </label>
@@ -4665,6 +4725,23 @@ export default function App() {
             mToUnits={mToUnits}
             spanIndexAtX={spanIndexAtX}
             indexToLetters={indexToLetters}
+            detailOverlay={
+              previewView === '2d' && steelOverlayLayer ? (
+                <SteelOverlay
+                  dev={dev}
+                  preview={preview}
+                  renderBounds={(detailViewport ?? (preview?.bounds as Bounds | undefined)) ?? null}
+                  canvasRef={canvasRef}
+                  layer={steelOverlayLayer}
+                  yScale={steelViewActive && steelYScale2 ? 2 : 1}
+                  onUpdateSpanSteel={updateSpanSteel}
+                  onUpdateNode={updateNode}
+                  onUpdateBaston={updateBaston}
+                  onUpdateStirrups={updateSpanStirrups}
+                  onUpdateStirrupsSection={updateSpanStirrupsSection}
+                />
+              ) : undefined
+            }
           />
         </div>
       </main>

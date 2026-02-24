@@ -9,10 +9,10 @@ import type { NodeIn, SpanIn, SteelKind, SupportType } from '../types';
 // ============================================================================
 
 const REBAR_TABLE_CM: Record<string, { ldg: number; ld_inf: number; ld_sup: number }> = {
-  '3/8': { ldg: 28, ld_inf: 60, ld_sup: 75 },
-  '1/2': { ldg: 38, ld_inf: 80, ld_sup: 100 },
-  '5/8': { ldg: 47, ld_inf: 95, ld_sup: 120 },
-  '3/4': { ldg: 56, ld_inf: 115, ld_sup: 145 },
+  '3/8': { ldg: 21, ld_inf: 35, ld_sup: 45 },
+  '1/2': { ldg: 28, ld_inf: 45, ld_sup: 60 },
+  '5/8': { ldg: 35, ld_inf: 60, ld_sup: 75 },
+  '3/4': { ldg: 42, ld_inf: 70, ld_sup: 90 },
   '1': { ldg: 56, ld_inf: 115, ld_sup: 145 },
   '1-3/8': { ldg: 77, ld_inf: 155, ld_sup: 200 },
 };
@@ -85,7 +85,7 @@ export function nodeBastonLineKind(node: NodeIn, side: 'top' | 'bottom', end: 1 
   const bastonV = (node as any)[bastonKey] as SteelKind | undefined;
   if (bastonV === 'continuous' || bastonV === 'hook' || bastonV === 'development') return bastonV;
 
-  return 'continuous';
+  return 'hook';
 }
 
 export function nodeBastonLineToFaceEnabled(node: NodeIn, side: 'top' | 'bottom', end: 1 | 2, line: 1 | 2): boolean {
@@ -358,15 +358,8 @@ export function applyBasicPreference(nodes: NodeIn[]): NodeSteelSetup[] {
  * @returns Array de spans modificados
  */
 export function applyBasicPreferenceToSpans(spans: SpanIn[]): SpanIn[] {
-  console.log('🔧 applyBasicPreferenceToSpans: Iniciando configuración de', spans.length, 'tramos');
-
   for (let i = 0; i < spans.length; i++) {
     const span = spans[i];
-
-    console.log(`📋 Tramo ${i + 1} ANTES:`, {
-      steel_top: (span as any).steel_top,
-      steel_bottom: (span as any).steel_bottom,
-    });
 
     // Configurar acero corrido superior: 2Ø5/8"
     (span as any).steel_top = {
@@ -380,14 +373,8 @@ export function applyBasicPreferenceToSpans(spans: SpanIn[]): SpanIn[] {
       diameter: BASIC_PREF.ACERO_CORRIDO_INFERIOR.diameter,
     };
 
-    console.log(`✅ Tramo ${i + 1} DESPUÉS:`, {
-      steel_top: (span as any).steel_top,
-      steel_bottom: (span as any).steel_bottom,
-    });
-    console.log(`   Superior: ${BASIC_PREF.ACERO_CORRIDO_SUPERIOR.qty}Ø${BASIC_PREF.ACERO_CORRIDO_SUPERIOR.diameter}" | Inferior: ${BASIC_PREF.ACERO_CORRIDO_INFERIOR.qty}Ø${BASIC_PREF.ACERO_CORRIDO_INFERIOR.diameter}"`);
   }
 
-  console.log('✓ applyBasicPreferenceToSpans: Configuración completada');
   return spans;
 }
 
@@ -420,43 +407,94 @@ export function applyBasicPreferenceToNodes(nodes: NodeIn[]): NodeIn[] {
     // Guardar longitudes de anclaje si aplican
     if (config.top1.anchorageLength) {
       (node as any).steel_top_1_anchorage_length = config.top1.anchorageLength;
-      console.log(`Nodo ${i + 1}: steel_top_1_anchorage_length = ${config.top1.anchorageLength}m (${config.top1.anchorageLength * 100}cm)`);
     }
     if (config.top2.anchorageLength) {
       (node as any).steel_top_2_anchorage_length = config.top2.anchorageLength;
-      console.log(`Nodo ${i + 1}: steel_top_2_anchorage_length = ${config.top2.anchorageLength}m (${config.top2.anchorageLength * 100}cm)`);
     }
     if (config.bottom1.anchorageLength) {
       (node as any).steel_bottom_1_anchorage_length = config.bottom1.anchorageLength;
-      console.log(`Nodo ${i + 1}: steel_bottom_1_anchorage_length = ${config.bottom1.anchorageLength}m (${config.bottom1.anchorageLength * 100}cm)`);
     }
     if (config.bottom2.anchorageLength) {
       (node as any).steel_bottom_2_anchorage_length = config.bottom2.anchorageLength;
-      console.log(`Nodo ${i + 1}: steel_bottom_2_anchorage_length = ${config.bottom2.anchorageLength}m (${config.bottom2.anchorageLength * 100}cm)`);
     }
 
-    // Log del tipo de nodo y configuración aplicada
-    const nodeWidth = Math.abs(node.b2 - (node.b1 || 0));
-    console.log(`Nodo ${i + 1} (${config.isStartNode ? 'INICIO' : config.isEndNode ? 'FIN' : 'INTERMEDIO'}):`, {
-      columnLength: `${config.columnLength}m (${(config.columnLength * 100).toFixed(0)}cm)`,
-      nodeWidth: `${nodeWidth.toFixed(2)}m (${(nodeWidth * 100).toFixed(0)}cm)`,
-      b1: node.b1,
-      b2: node.b2,
-      top1: `${config.top1.kind}${config.top1.anchorageLength ? ` (${config.top1.anchorageLength * 100}cm)` : ''}`,
-      top2: `${config.top2.kind}${config.top2.anchorageLength ? ` (${config.top2.anchorageLength * 100}cm)` : ''}`,
-      bottom1: `${config.bottom1.kind}${config.bottom1.anchorageLength ? ` (${config.bottom1.anchorageLength * 100}cm)` : ''}`,
-      bottom2: `${config.bottom2.kind}${config.bottom2.anchorageLength ? ` (${config.bottom2.anchorageLength * 100}cm)` : ''}`,
-    });
 
-    // Verificar que las longitudes de anclaje se guardaron correctamente
-    console.log(`   📋 Campos en nodo ${i + 1}:`, {
-      steel_top_1_kind: (node as any).steel_top_1_kind,
-      steel_top_1_anchorage_length: (node as any).steel_top_1_anchorage_length,
-      steel_top_1_to_face: (node as any).steel_top_1_to_face,
-      steel_bottom_1_kind: (node as any).steel_bottom_1_kind,
-      steel_bottom_1_anchorage_length: (node as any).steel_bottom_1_anchorage_length,
-      steel_bottom_1_to_face: (node as any).steel_bottom_1_to_face,
-    });
+  }
+
+  return nodes;
+}
+
+// ============================================================================
+// PREFERENCIA 02: BÁSICO + BASTONES
+// ============================================================================
+
+/**
+ * Configuración por defecto de bastones para un zone de un span.
+ * L1 y L2 habilitados con 2Ø5/8".
+ */
+function defaultBastonCfg(): {
+  l1_enabled: boolean; l1_qty: number; l1_diameter: string;
+  l2_enabled: boolean; l2_qty: number; l2_diameter: string;
+} {
+  return {
+    l1_enabled: true, l1_qty: 2, l1_diameter: '5/8',
+    l2_enabled: true, l2_qty: 2, l2_diameter: '5/8',
+  };
+}
+
+/**
+ * Aplica Preferencia 02 a los spans: todo lo de Pref 01 + bastones por defecto.
+ *
+ * Superior: Z1 y Z3 activados (L1+L2, 2Ø5/8")
+ * Inferior: Z2 activado (L1+L2, 2Ø5/8")
+ */
+export function applyBasicBastonesPreferenceToSpans(spans: SpanIn[]): SpanIn[] {
+  // Primero aplicar Pref 01 (acero corrido)
+  applyBasicPreferenceToSpans(spans);
+
+  for (let i = 0; i < spans.length; i++) {
+    const span = spans[i] as any;
+
+    // Inicializar bastones si no existen
+    if (!span.bastones) span.bastones = {};
+    if (!span.bastones.top) span.bastones.top = {};
+    if (!span.bastones.bottom) span.bastones.bottom = {};
+
+    // Superior: Z1 y Z3 activados
+    span.bastones.top.z1 = { ...defaultBastonCfg() };
+    span.bastones.top.z2 = span.bastones.top.z2 ?? {};
+    span.bastones.top.z3 = { ...defaultBastonCfg() };
+
+    // Inferior: Z2 activado
+    span.bastones.bottom.z1 = span.bastones.bottom.z1 ?? {};
+    span.bastones.bottom.z2 = { ...defaultBastonCfg() };
+    span.bastones.bottom.z3 = span.bastones.bottom.z3 ?? {};
+  }
+
+  return spans;
+}
+
+/**
+ * Aplica las mismas reglas de nodo del acero corrido a los bastones.
+ * Para cada nodo, los baston line kinds (L1, L2) toman el mismo valor
+ * que el steel kind del acero corrido en ese nodo/lado/end.
+ */
+export function applyBasicBastonesPreferenceToNodes(nodes: NodeIn[]): NodeIn[] {
+  // Primero aplicar Pref 01 (acero corrido)
+  applyBasicPreferenceToNodes(nodes);
+
+  // Copiar las reglas de los nodos del acero corrido a los bastones
+  for (let i = 0; i < nodes.length; i++) {
+    const node = nodes[i] as any;
+
+    for (const side of ['top', 'bottom'] as const) {
+      for (const end of [1, 2] as const) {
+        const steelKind = node[`steel_${side}_${end}_kind`] ?? 'continuous';
+        // Aplicar el mismo kind a L1 y L2 de los bastones
+        node[`baston_${side}_${end}_l1_kind`] = steelKind;
+        node[`baston_${side}_${end}_l2_kind`] = steelKind;
+      }
+    }
   }
 
   return nodes;

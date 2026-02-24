@@ -3,7 +3,7 @@
  */
 
 export type LevelType = 'piso' | 'sotano' | 'azotea';
-export type DefaultPreferenceId = 'basico' | 'personalizado';
+export type DefaultPreferenceId = 'basico' | 'basico_bastones' | 'personalizado';
 
 /**
  * Formatea un número de viga con padding (01, 02, ..., 99)
@@ -55,7 +55,9 @@ export function formatOrdinalEs(n: number): string {
  */
 export function parseDefaultPref(raw: unknown): DefaultPreferenceId {
   const v = String(raw ?? '').trim().toLowerCase();
-  return v === 'personalizado' ? 'personalizado' : 'basico';
+  if (v === 'personalizado') return 'personalizado';
+  if (v === 'basico_bastones') return 'basico_bastones';
+  return 'basico';
 }
 
 /**

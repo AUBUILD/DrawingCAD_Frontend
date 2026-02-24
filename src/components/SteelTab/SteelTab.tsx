@@ -52,7 +52,7 @@ export interface SteelTabProps {
   // Data
   dev: DevelopmentIn;
   appCfg: any;
-  defaultPref: 'basico' | 'personalizado';
+  defaultPref: 'basico' | 'basico_bastones' | 'personalizado';
 
   // Draft states
   steelLayoutDraft: string;
@@ -111,7 +111,7 @@ export interface SteelTabProps {
  * - Bastones (superior e inferior)
  * - Distribución de estribos por tramo (ABCR)
  */
-export const SteelTab: React.FC<SteelTabProps> = ({
+const SteelTabInner: React.FC<SteelTabProps> = ({
   dev,
   appCfg,
   defaultPref,
@@ -151,13 +151,13 @@ export const SteelTab: React.FC<SteelTabProps> = ({
 }) => {
   return (
     <div className="form">
-      {defaultPref !== 'basico' ? (
+      {defaultPref === 'personalizado' ? (
       <div className="muted">
         <b>Acero corrido</b> (por tramo). Se dibuja en cyan en la Vista previa 2D.
       </div>
       ) : null}
 
-      {defaultPref !== 'basico' ? (
+      {defaultPref === 'personalizado' ? (
       <div>
         <div className="sectionHeader">
           <div>Distribución en sección (E.060)</div>
@@ -813,8 +813,8 @@ export const SteelTab: React.FC<SteelTabProps> = ({
           const caseTypeOf = (st: any) => String(st.case_type ?? 'simetrica');
           const singleEndOf = (st: any) => String(st.single_end ?? '');
           const modeOf = (st: any) => {
-            const v = String(st.design_mode ?? 'sismico').trim().toLowerCase();
-            return v === 'gravedad' ? 'gravedad' : 'sismico';
+            const v = String(st.design_mode ?? 'gravedad').trim().toLowerCase();
+            return v === 'sismico' ? 'sismico' : 'gravedad';
           };
 
           const fmt = (v: number | undefined | null) => (typeof v === 'number' && Number.isFinite(v) ? v.toFixed(2) : '');
@@ -1083,3 +1083,5 @@ export const SteelTab: React.FC<SteelTabProps> = ({
     </div>
   );
 };
+
+export const SteelTab = React.memo(SteelTabInner);

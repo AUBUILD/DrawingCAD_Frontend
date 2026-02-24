@@ -74,6 +74,9 @@ export interface PreviewPanelProps {
   mToUnits: (dev: DevelopmentIn, m: number) => number;
   spanIndexAtX: (dev: DevelopmentIn, xU: number) => number;
   indexToLetters: (index: number) => string;
+
+  // Optional overlay rendered above the detail canvas
+  detailOverlay?: React.ReactNode;
 }
 
 /**
@@ -85,7 +88,7 @@ export interface PreviewPanelProps {
  * - Sección transversal con cortes guardados
  * - Controles de navegación y visualización
  */
-export const PreviewPanel: React.FC<PreviewPanelProps> = ({
+const PreviewPanelInner: React.FC<PreviewPanelProps> = ({
   preview,
   previewView,
   setPreviewView,
@@ -123,6 +126,7 @@ export const PreviewPanel: React.FC<PreviewPanelProps> = ({
   mToUnits,
   spanIndexAtX,
   indexToLetters,
+  detailOverlay,
 }) => {
   
   return (
@@ -232,22 +236,25 @@ export const PreviewPanel: React.FC<PreviewPanelProps> = ({
         <div className="zoomBody" style={{ display: 'flex', gap: 12, alignItems: 'stretch' }}>
           <div className="zoomStage" style={{ flex: steelViewActive && previewView === '2d' ? '3 1 0%' : '1 1 0%', minWidth: 0 }}>
             {previewView === '2d' ? (
-              <canvas
-                ref={canvasRef}
-                width={900}
-                height={300}
-                className="canvas detailCanvas"
-                style={{ touchAction: 'none' }}
-                onWheel={onCanvasWheel}
-                onPointerDown={onCanvasPointerDown}
-                onPointerMove={onCanvasPointerMove}
-                onPointerUp={onCanvasPointerUp}
-                onPointerCancel={onCanvasPointerUp}
-                onDoubleClick={() => setDetailViewport(null)}
-                onContextMenu={(e) => e.preventDefault()}
-                onClick={onCanvasClick}
-                title="2D (zoom): rueda = zoom, arrastrar = pan, doble click = reset"
-              />
+              <div style={{ position: 'relative' }}>
+                <canvas
+                  ref={canvasRef}
+                  width={900}
+                  height={300}
+                  className="canvas detailCanvas"
+                  style={{ touchAction: 'none' }}
+                  onWheel={onCanvasWheel}
+                  onPointerDown={onCanvasPointerDown}
+                  onPointerMove={onCanvasPointerMove}
+                  onPointerUp={onCanvasPointerUp}
+                  onPointerCancel={onCanvasPointerUp}
+                  onDoubleClick={() => setDetailViewport(null)}
+                  onContextMenu={(e) => e.preventDefault()}
+                  onClick={onCanvasClick}
+                  title="2D (zoom): rueda = zoom, arrastrar = pan, doble click = reset"
+                />
+                {detailOverlay}
+              </div>
             ) : null}
             {previewView === '3d' ? <div ref={threeHostRef} className="canvas3d detailCanvas3d" /> : null}
           </div>
@@ -364,3 +371,5 @@ export const PreviewPanel: React.FC<PreviewPanelProps> = ({
     </div>
   );
 };
+
+export const PreviewPanel = React.memo(PreviewPanelInner);

@@ -1,18 +1,15 @@
 import React from 'react';
-
-// Types and utility functions (extract from App2.tsx as needed)
-// Example types (replace with actual types from App2.tsx):
-// type NodeSlot = { nodeIdx: number; end: number; label: string };
-// type DevType = { nodes: any[]; spans: any[] };
+import type { DevelopmentIn, NodeIn, SteelKind, BastonCfg, BastonesSideCfg } from '../types';
+import type { NodeSlot } from '../services/steelService';
 
 interface NodosTableProps {
-  dev: any;
-  setNodeBastonLineKind: Function;
-  setNodeBastonLineToFace: Function;
-  nodeBastonLineKind: Function;
-  nodeBastonLineToFaceEnabled: Function;
-  normalizeBastonCfg: Function;
-  buildNodeSlots: Function;
+  dev: DevelopmentIn;
+  setNodeBastonLineKind: (nodeIdx: number, side: 'top' | 'bottom', end: 1 | 2, line: 1 | 2, kind: SteelKind) => void;
+  setNodeBastonLineToFace: (nodeIdx: number, side: 'top' | 'bottom', end: 1 | 2, line: 1 | 2, enabled: boolean) => void;
+  nodeBastonLineKind: (node: NodeIn, side: 'top' | 'bottom', end: 1 | 2, line: 1 | 2) => SteelKind;
+  nodeBastonLineToFaceEnabled: (node: NodeIn, side: 'top' | 'bottom', end: 1 | 2, line: 1 | 2) => boolean;
+  normalizeBastonCfg: (input: unknown) => BastonCfg;
+  buildNodeSlots: (nodes: NodeIn[]) => NodeSlot[];
 }
 
 const NodosTable: React.FC<NodosTableProps> = ({
@@ -28,21 +25,21 @@ const NodosTable: React.FC<NodosTableProps> = ({
   const spans = dev.spans ?? [];
   const slots = buildNodeSlots(nodes);
 
-  const zoneEnabledForSlot = (side: 'top' | 'bottom', s: any) => {
+  const zoneEnabledForSlot = (side: 'top' | 'bottom', s: NodeSlot) => {
     const spanIdx = s.end === 2 ? s.nodeIdx : s.nodeIdx - 1;
-    const zone = s.end === 2 ? 'z1' : 'z3';
+    const zone: 'z1' | 'z3' = s.end === 2 ? 'z1' : 'z3';
     const span = spans[spanIdx];
     if (!span) return { l1: false, l2: false };
-    const b = (span as any).bastones ?? {};
-    const ss = (side === 'top' ? b.top : b.bottom) ?? {};
-    const cfg = normalizeBastonCfg((ss as any)[zone]);
+    const b = span.bastones ?? {} as Partial<{ top: BastonesSideCfg; bottom: BastonesSideCfg }>;
+    const ss = (side === 'top' ? b.top : b.bottom) ?? {} as Partial<BastonesSideCfg>;
+    const cfg = normalizeBastonCfg((ss as Record<string, unknown>)[zone]);
     return {
       l1: Boolean(cfg.l1_enabled),
       l2: Boolean(cfg.l2_enabled),
     };
   };
 
-  const Cell = (props: { slot: any; side: 'top' | 'bottom' }) => {
+  const Cell = (props: { slot: NodeSlot; side: 'top' | 'bottom' }) => {
     const { slot, side } = props;
     const n = nodes[slot.nodeIdx];
     const enabled = zoneEnabledForSlot(side, slot);
@@ -65,7 +62,7 @@ const NodosTable: React.FC<NodosTableProps> = ({
               className="cellInput"
               value={v1}
               disabled={!enabled.l1}
-              onChange={(e) => setNodeBastonLineKind(slot.nodeIdx, side, slot.end, 1, e.target.value)}
+              onChange={(e) => setNodeBastonLineKind(slot.nodeIdx, side, slot.end, 1, e.target.value as SteelKind)}
             >
               <option value="continuous">Continuo</option>
               <option value="hook">Gancho</option>
@@ -86,7 +83,7 @@ const NodosTable: React.FC<NodosTableProps> = ({
               className="cellInput"
               value={v2}
               disabled={!enabled.l2}
-              onChange={(e) => setNodeBastonLineKind(slot.nodeIdx, side, slot.end, 2, e.target.value)}
+              onChange={(e) => setNodeBastonLineKind(slot.nodeIdx, side, slot.end, 2, e.target.value as SteelKind)}
             >
               <option value="continuous">Continuo</option>
               <option value="hook">Gancho</option>
@@ -111,17 +108,17 @@ const NodosTable: React.FC<NodosTableProps> = ({
       <div className="tableScroll">
         <div className="matrix" style={{ gridTemplateColumns: `105px repeat(${slots.length}, 90px)` }}>
           <div className="cell head rowLabel">Parámetros</div>
-          {slots.map((s: any) => (
+          {slots.map((s: NodeSlot) => (
             <div className={'cell head'} key={`baston-node-head-${s.nodeIdx}-${s.end}`}>
               <div className="mono">{s.label}</div>
             </div>
           ))}
           <div className="cell rowLabel">Sup.</div>
-          {slots.map((s: any) => (
+          {slots.map((s: NodeSlot) => (
             <Cell slot={s} side="top" key={`baston-top-cell-${s.nodeIdx}-${s.end}`} />
           ))}
           <div className="cell rowLabel">Inf.</div>
-          {slots.map((s: any) => (
+          {slots.map((s: NodeSlot) => (
             <Cell slot={s} side="bottom" key={`baston-bot-cell-${s.nodeIdx}-${s.end}`} />
           ))}
         </div>
@@ -130,4 +127,4 @@ const NodosTable: React.FC<NodosTableProps> = ({
   );
 };
 
-export default NodosTable;
+export default React.memo(NodosTable);

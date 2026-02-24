@@ -1,6 +1,7 @@
 import React, { useRef } from 'react';
 import type { DevelopmentIn, SpanIn, NodeIn } from '../../types';
 import type { Selection } from '../../hooks/useSelection';
+import { EditableCell } from './EditableCell';
 
 type LevelType = 'piso' | 'sotano' | 'azotea';
 
@@ -58,7 +59,7 @@ export interface ConcreteTabProps {
  * - Edición de tramos (L, h, b)
  * - Edición de nodos (b1, b2, a2, project_b, project_a)
  */
-export const ConcreteTab: React.FC<ConcreteTabProps> = ({
+const ConcreteTabInner: React.FC<ConcreteTabProps> = ({
   dev,
   selection,
   spansCols,
@@ -232,18 +233,15 @@ export const ConcreteTab: React.FC<ConcreteTabProps> = ({
               <div className="cell rowLabel">L (m)</div>
               {(dev.spans ?? []).map((s, i) => (
                 <div className={selection.kind === 'span' && selection.index === i ? 'cell cellSelected' : 'cell'} key={`span-L-${i}`}>
-                  <input
+                  <EditableCell
                     className="cellInput"
-                    type="number"
-                    step="0.01"
-                    value={fmt2(s.L ?? 0)}
+                    value={s.L ?? 0}
                     readOnly={concretoLocked}
-                    onChange={(e) => updateSpan(i, { L: clampNumber(e.target.value, s.L ?? 0) })}
+                    fmt={fmt2}
+                    parse={clampNumber}
+                    onChange={(v) => updateSpan(i, { L: v })}
                     onKeyDown={(e) => onGridKeyDown(e, 'spans', 0, i, 3, spansCols)}
-                    onFocus={(e) => {
-                      applySelection({ kind: 'span', index: i }, true);
-                      (e.target as HTMLInputElement).select?.();
-                    }}
+                    onFocus={() => applySelection({ kind: 'span', index: i }, true)}
                     data-grid="spans"
                     data-row={0}
                     data-col={i}
@@ -254,18 +252,15 @@ export const ConcreteTab: React.FC<ConcreteTabProps> = ({
               <div className="cell rowLabel">h (m)</div>
               {(dev.spans ?? []).map((s, i) => (
                 <div className={selection.kind === 'span' && selection.index === i ? 'cell cellSelected' : 'cell'} key={`span-h-${i}`}>
-                  <input
+                  <EditableCell
                     className="cellInput"
-                    type="number"
-                    step="0.01"
-                    value={fmt2(s.h ?? 0)}
+                    value={s.h ?? 0}
                     readOnly={concretoLocked}
-                    onChange={(e) => updateSpan(i, { h: clampNumber(e.target.value, s.h ?? 0) })}
+                    fmt={fmt2}
+                    parse={clampNumber}
+                    onChange={(v) => updateSpan(i, { h: v })}
                     onKeyDown={(e) => onGridKeyDown(e, 'spans', 1, i, 3, spansCols)}
-                    onFocus={(e) => {
-                      applySelection({ kind: 'span', index: i }, true);
-                      (e.target as HTMLInputElement).select?.();
-                    }}
+                    onFocus={() => applySelection({ kind: 'span', index: i }, true)}
                     data-grid="spans"
                     data-row={1}
                     data-col={i}
@@ -276,18 +271,15 @@ export const ConcreteTab: React.FC<ConcreteTabProps> = ({
               <div className="cell rowLabel">b (m)</div>
               {(dev.spans ?? []).map((s, i) => (
                 <div className={selection.kind === 'span' && selection.index === i ? 'cell cellSelected' : 'cell'} key={`span-b-${i}`}>
-                  <input
+                  <EditableCell
                     className="cellInput"
-                    type="number"
-                    step="0.01"
-                    value={fmt2(s.b ?? 0)}
+                    value={s.b ?? 0}
                     readOnly={concretoLocked}
-                    onChange={(e) => updateSpan(i, { b: clampNumber(e.target.value, s.b ?? 0) })}
+                    fmt={fmt2}
+                    parse={clampNumber}
+                    onChange={(v) => updateSpan(i, { b: v })}
                     onKeyDown={(e) => onGridKeyDown(e, 'spans', 2, i, 3, spansCols)}
-                    onFocus={(e) => {
-                      applySelection({ kind: 'span', index: i }, true);
-                      (e.target as HTMLInputElement).select?.();
-                    }}
+                    onFocus={() => applySelection({ kind: 'span', index: i }, true)}
                     data-grid="spans"
                     data-row={2}
                     data-col={i}
@@ -318,18 +310,15 @@ export const ConcreteTab: React.FC<ConcreteTabProps> = ({
               <div className="cell rowLabel">X1 superior (b1)</div>
               {(dev.nodes ?? []).map((n, i) => (
                 <div className={selection.kind === 'node' && selection.index === i ? 'cell cellSelected' : 'cell'} key={`node-b1-${i}`}>
-                  <input
+                  <EditableCell
                     className="cellInput"
-                    type="number"
-                    step="0.01"
-                    value={fmt2(n.b1 ?? 0)}
+                    value={n.b1 ?? 0}
                     readOnly={concretoLocked}
-                    onChange={(e) => updateNode(i, { b1: clampNumber(e.target.value, n.b1) })}
+                    fmt={fmt2}
+                    parse={clampNumber}
+                    onChange={(v) => updateNode(i, { b1: v })}
                     onKeyDown={(e) => onGridKeyDown(e, 'nodes', 0, i, 5, nodesCols)}
-                    onFocus={(e) => {
-                      applySelection({ kind: 'node', index: i }, true);
-                      (e.target as HTMLInputElement).select?.();
-                    }}
+                    onFocus={() => applySelection({ kind: 'node', index: i }, true)}
                     data-grid="nodes"
                     data-row={0}
                     data-col={i}
@@ -340,18 +329,15 @@ export const ConcreteTab: React.FC<ConcreteTabProps> = ({
               <div className="cell rowLabel">X2 superior (b2)</div>
               {(dev.nodes ?? []).map((n, i) => (
                 <div className={selection.kind === 'node' && selection.index === i ? 'cell cellSelected' : 'cell'} key={`node-b2-${i}`}>
-                  <input
+                  <EditableCell
                     className="cellInput"
-                    type="number"
-                    step="0.01"
-                    value={fmt2(n.b2 ?? 0)}
+                    value={n.b2 ?? 0}
                     readOnly={concretoLocked}
-                    onChange={(e) => updateNode(i, { b2: clampNumber(e.target.value, n.b2) })}
+                    fmt={fmt2}
+                    parse={clampNumber}
+                    onChange={(v) => updateNode(i, { b2: v })}
                     onKeyDown={(e) => onGridKeyDown(e, 'nodes', 1, i, 5, nodesCols)}
-                    onFocus={(e) => {
-                      applySelection({ kind: 'node', index: i }, true);
-                      (e.target as HTMLInputElement).select?.();
-                    }}
+                    onFocus={() => applySelection({ kind: 'node', index: i }, true)}
                     data-grid="nodes"
                     data-row={1}
                     data-col={i}
@@ -381,18 +367,15 @@ export const ConcreteTab: React.FC<ConcreteTabProps> = ({
               <div className="cell rowLabel">X2 inferior (a2)</div>
               {(dev.nodes ?? []).map((n, i) => (
                 <div className={selection.kind === 'node' && selection.index === i ? 'cell cellSelected' : 'cell'} key={`node-a2-${i}`}>
-                  <input
+                  <EditableCell
                     className="cellInput"
-                    type="number"
-                    step="0.01"
-                    value={fmt2(n.a2 ?? 0)}
+                    value={n.a2 ?? 0}
                     readOnly={concretoLocked}
-                    onChange={(e) => updateNode(i, { a2: clampNumber(e.target.value, n.a2) })}
+                    fmt={fmt2}
+                    parse={clampNumber}
+                    onChange={(v) => updateNode(i, { a2: v })}
                     onKeyDown={(e) => onGridKeyDown(e, 'nodes', 3, i, 5, nodesCols)}
-                    onFocus={(e) => {
-                      applySelection({ kind: 'node', index: i }, true);
-                      (e.target as HTMLInputElement).select?.();
-                    }}
+                    onFocus={() => applySelection({ kind: 'node', index: i }, true)}
                     data-grid="nodes"
                     data-row={3}
                     data-col={i}
@@ -427,3 +410,5 @@ export const ConcreteTab: React.FC<ConcreteTabProps> = ({
     </div>
   );
 };
+
+export const ConcreteTab = React.memo(ConcreteTabInner);

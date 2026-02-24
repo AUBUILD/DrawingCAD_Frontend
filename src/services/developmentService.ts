@@ -119,24 +119,24 @@ export const INITIAL_NODE: NodeIn = {
   steel_bottom_1_kind: 'continuous',
   steel_bottom_2_kind: 'continuous',
 
-  // Bastones (Z1/Z3) en nodos
-  baston_top_1_kind: 'continuous',
-  baston_top_2_kind: 'continuous',
-  baston_bottom_1_kind: 'continuous',
-  baston_bottom_2_kind: 'continuous',
+  // Bastones (Z1/Z3) en nodos — default: gancho
+  baston_top_1_kind: 'hook',
+  baston_top_2_kind: 'hook',
+  baston_bottom_1_kind: 'hook',
+  baston_bottom_2_kind: 'hook',
   baston_top_1_to_face: false,
   baston_top_2_to_face: false,
   baston_bottom_1_to_face: false,
   baston_bottom_2_to_face: false,
 
-  baston_top_1_l1_kind: 'continuous',
-  baston_top_1_l2_kind: 'continuous',
-  baston_top_2_l1_kind: 'continuous',
-  baston_top_2_l2_kind: 'continuous',
-  baston_bottom_1_l1_kind: 'continuous',
-  baston_bottom_1_l2_kind: 'continuous',
-  baston_bottom_2_l1_kind: 'continuous',
-  baston_bottom_2_l2_kind: 'continuous',
+  baston_top_1_l1_kind: 'hook',
+  baston_top_1_l2_kind: 'hook',
+  baston_top_2_l1_kind: 'hook',
+  baston_top_2_l2_kind: 'hook',
+  baston_bottom_1_l1_kind: 'hook',
+  baston_bottom_1_l2_kind: 'hook',
+  baston_bottom_2_l1_kind: 'hook',
+  baston_bottom_2_l2_kind: 'hook',
   baston_top_1_l1_to_face: false,
   baston_top_1_l2_to_face: false,
   baston_top_2_l1_to_face: false,
@@ -223,22 +223,22 @@ export function cloneNode(node: NodeIn): NodeIn {
     steel_top_2_kind: node.steel_top_2_kind ?? legacyTop,
     steel_bottom_1_kind: node.steel_bottom_1_kind ?? legacyBottom,
     steel_bottom_2_kind: node.steel_bottom_2_kind ?? legacyBottom,
-    baston_top_1_kind: (node as any).baston_top_1_kind ?? 'continuous',
-    baston_top_2_kind: (node as any).baston_top_2_kind ?? 'continuous',
-    baston_bottom_1_kind: (node as any).baston_bottom_1_kind ?? 'continuous',
-    baston_bottom_2_kind: (node as any).baston_bottom_2_kind ?? 'continuous',
+    baston_top_1_kind: (node as any).baston_top_1_kind ?? 'hook',
+    baston_top_2_kind: (node as any).baston_top_2_kind ?? 'hook',
+    baston_bottom_1_kind: (node as any).baston_bottom_1_kind ?? 'hook',
+    baston_bottom_2_kind: (node as any).baston_bottom_2_kind ?? 'hook',
     baston_top_1_to_face: (node as any).baston_top_1_to_face ?? false,
     baston_top_2_to_face: (node as any).baston_top_2_to_face ?? false,
     baston_bottom_1_to_face: (node as any).baston_bottom_1_to_face ?? false,
     baston_bottom_2_to_face: (node as any).baston_bottom_2_to_face ?? false,
-    baston_top_1_l1_kind: (node as any).baston_top_1_l1_kind ?? (node as any).baston_top_1_kind ?? 'continuous',
-    baston_top_1_l2_kind: (node as any).baston_top_1_l2_kind ?? (node as any).baston_top_1_kind ?? 'continuous',
-    baston_top_2_l1_kind: (node as any).baston_top_2_l1_kind ?? (node as any).baston_top_2_kind ?? 'continuous',
-    baston_top_2_l2_kind: (node as any).baston_top_2_l2_kind ?? (node as any).baston_top_2_kind ?? 'continuous',
-    baston_bottom_1_l1_kind: (node as any).baston_bottom_1_l1_kind ?? (node as any).baston_bottom_1_kind ?? 'continuous',
-    baston_bottom_1_l2_kind: (node as any).baston_bottom_1_l2_kind ?? (node as any).baston_bottom_1_kind ?? 'continuous',
-    baston_bottom_2_l1_kind: (node as any).baston_bottom_2_l1_kind ?? (node as any).baston_bottom_2_kind ?? 'continuous',
-    baston_bottom_2_l2_kind: (node as any).baston_bottom_2_l2_kind ?? (node as any).baston_bottom_2_kind ?? 'continuous',
+    baston_top_1_l1_kind: (node as any).baston_top_1_l1_kind ?? (node as any).baston_top_1_kind ?? 'hook',
+    baston_top_1_l2_kind: (node as any).baston_top_1_l2_kind ?? (node as any).baston_top_1_kind ?? 'hook',
+    baston_top_2_l1_kind: (node as any).baston_top_2_l1_kind ?? (node as any).baston_top_2_kind ?? 'hook',
+    baston_top_2_l2_kind: (node as any).baston_top_2_l2_kind ?? (node as any).baston_top_2_kind ?? 'hook',
+    baston_bottom_1_l1_kind: (node as any).baston_bottom_1_l1_kind ?? (node as any).baston_bottom_1_kind ?? 'hook',
+    baston_bottom_1_l2_kind: (node as any).baston_bottom_1_l2_kind ?? (node as any).baston_bottom_1_kind ?? 'hook',
+    baston_bottom_2_l1_kind: (node as any).baston_bottom_2_l1_kind ?? (node as any).baston_bottom_2_kind ?? 'hook',
+    baston_bottom_2_l2_kind: (node as any).baston_bottom_2_l2_kind ?? (node as any).baston_bottom_2_kind ?? 'hook',
     baston_top_1_l1_to_face: (node as any).baston_top_1_l1_to_face ?? (node as any).baston_top_1_to_face ?? false,
     baston_top_1_l2_to_face: (node as any).baston_top_1_l2_to_face ?? (node as any).baston_top_1_to_face ?? false,
     baston_top_2_l1_to_face: (node as any).baston_top_2_l1_to_face ?? (node as any).baston_top_2_to_face ?? false,
@@ -418,8 +418,8 @@ export function normalizeDev(input: DevelopmentIn, appCfg: AppConfig): Developme
 
     let stirrups = normalizeStirrupsDistribution((s as any).stirrups);
     const ct = String((stirrups as any)?.case_type ?? 'simetrica').trim().toLowerCase();
-    const modeRaw = String((stirrups as any)?.design_mode ?? 'sismico').trim().toLowerCase();
-    const mode: 'sismico' | 'gravedad' = modeRaw === 'gravedad' ? 'gravedad' : 'sismico';
+    const modeRaw = String((stirrups as any)?.design_mode ?? 'gravedad').trim().toLowerCase();
+    const mode: 'sismico' | 'gravedad' = modeRaw === 'sismico' ? 'sismico' : 'gravedad';
 
     const defaultSpec = formatStirrupsABCR(pickDefaultABCRForH(h, mode));
     const applyDefaults = () => {
@@ -514,23 +514,23 @@ export function normalizeDev(input: DevelopmentIn, appCfg: AppConfig): Developme
       steel_bottom_1_anchorage_length: (n as any).steel_bottom_1_anchorage_length,
       steel_bottom_2_anchorage_length: (n as any).steel_bottom_2_anchorage_length,
 
-      baston_top_1_kind: (n as any).baston_top_1_kind ?? (n as any).bastonTop1Kind ?? 'continuous',
-      baston_top_2_kind: (n as any).baston_top_2_kind ?? (n as any).bastonTop2Kind ?? 'continuous',
-      baston_bottom_1_kind: (n as any).baston_bottom_1_kind ?? (n as any).bastonBottom1Kind ?? 'continuous',
-      baston_bottom_2_kind: (n as any).baston_bottom_2_kind ?? (n as any).bastonBottom2Kind ?? 'continuous',
+      baston_top_1_kind: (n as any).baston_top_1_kind ?? (n as any).bastonTop1Kind ?? 'hook',
+      baston_top_2_kind: (n as any).baston_top_2_kind ?? (n as any).bastonTop2Kind ?? 'hook',
+      baston_bottom_1_kind: (n as any).baston_bottom_1_kind ?? (n as any).bastonBottom1Kind ?? 'hook',
+      baston_bottom_2_kind: (n as any).baston_bottom_2_kind ?? (n as any).bastonBottom2Kind ?? 'hook',
       baston_top_1_to_face: (n as any).baston_top_1_to_face ?? (n as any).bastonTop1ToFace ?? false,
       baston_top_2_to_face: (n as any).baston_top_2_to_face ?? (n as any).bastonTop2ToFace ?? false,
       baston_bottom_1_to_face: (n as any).baston_bottom_1_to_face ?? (n as any).bastonBottom1ToFace ?? false,
       baston_bottom_2_to_face: (n as any).baston_bottom_2_to_face ?? (n as any).bastonBottom2ToFace ?? false,
 
-      baston_top_1_l1_kind: (n as any).baston_top_1_l1_kind ?? (n as any).bastonTop1L1Kind ?? (n as any).baston_top_1_kind ?? 'continuous',
-      baston_top_1_l2_kind: (n as any).baston_top_1_l2_kind ?? (n as any).bastonTop1L2Kind ?? (n as any).baston_top_1_kind ?? 'continuous',
-      baston_top_2_l1_kind: (n as any).baston_top_2_l1_kind ?? (n as any).bastonTop2L1Kind ?? (n as any).baston_top_2_kind ?? 'continuous',
-      baston_top_2_l2_kind: (n as any).baston_top_2_l2_kind ?? (n as any).bastonTop2L2Kind ?? (n as any).baston_top_2_kind ?? 'continuous',
-      baston_bottom_1_l1_kind: (n as any).baston_bottom_1_l1_kind ?? (n as any).bastonBottom1L1Kind ?? (n as any).baston_bottom_1_kind ?? 'continuous',
-      baston_bottom_1_l2_kind: (n as any).baston_bottom_1_l2_kind ?? (n as any).bastonBottom1L2Kind ?? (n as any).baston_bottom_1_kind ?? 'continuous',
-      baston_bottom_2_l1_kind: (n as any).baston_bottom_2_l1_kind ?? (n as any).bastonBottom2L1Kind ?? (n as any).baston_bottom_2_kind ?? 'continuous',
-      baston_bottom_2_l2_kind: (n as any).baston_bottom_2_l2_kind ?? (n as any).bastonBottom2L2Kind ?? (n as any).baston_bottom_2_kind ?? 'continuous',
+      baston_top_1_l1_kind: (n as any).baston_top_1_l1_kind ?? (n as any).bastonTop1L1Kind ?? (n as any).baston_top_1_kind ?? 'hook',
+      baston_top_1_l2_kind: (n as any).baston_top_1_l2_kind ?? (n as any).bastonTop1L2Kind ?? (n as any).baston_top_1_kind ?? 'hook',
+      baston_top_2_l1_kind: (n as any).baston_top_2_l1_kind ?? (n as any).bastonTop2L1Kind ?? (n as any).baston_top_2_kind ?? 'hook',
+      baston_top_2_l2_kind: (n as any).baston_top_2_l2_kind ?? (n as any).bastonTop2L2Kind ?? (n as any).baston_top_2_kind ?? 'hook',
+      baston_bottom_1_l1_kind: (n as any).baston_bottom_1_l1_kind ?? (n as any).bastonBottom1L1Kind ?? (n as any).baston_bottom_1_kind ?? 'hook',
+      baston_bottom_1_l2_kind: (n as any).baston_bottom_1_l2_kind ?? (n as any).bastonBottom1L2Kind ?? (n as any).baston_bottom_1_kind ?? 'hook',
+      baston_bottom_2_l1_kind: (n as any).baston_bottom_2_l1_kind ?? (n as any).bastonBottom2L1Kind ?? (n as any).baston_bottom_2_kind ?? 'hook',
+      baston_bottom_2_l2_kind: (n as any).baston_bottom_2_l2_kind ?? (n as any).bastonBottom2L2Kind ?? (n as any).baston_bottom_2_kind ?? 'hook',
 
       baston_top_1_l1_to_face: (n as any).baston_top_1_l1_to_face ?? (n as any).bastonTop1L1ToFace ?? (n as any).baston_top_1_to_face ?? false,
       baston_top_1_l2_to_face: (n as any).baston_top_1_l2_to_face ?? (n as any).bastonTop1L2ToFace ?? (n as any).baston_top_1_to_face ?? false,
@@ -608,7 +608,11 @@ export function normalizeDev(input: DevelopmentIn, appCfg: AppConfig): Developme
     })(),
     spans: safeSpans,
     nodes: safeNodes,
-    crossbeams: (input as any).crossbeams || [],
+    crossbeams: ((input as any).crossbeams || []).map((cb: any) => {
+      const spanIdx = typeof cb.span_index === 'number' ? cb.span_index : 0;
+      const spanH = safeSpans[spanIdx]?.h ?? INITIAL_SPAN.h;
+      return { ...cb, h: spanH };
+    }),
   };
 }
 

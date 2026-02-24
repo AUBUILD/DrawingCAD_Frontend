@@ -5,8 +5,8 @@ import React, { useRef } from 'react';
  */
 export interface ConfigTabProps {
   // Preferencias
-  defaultPref: 'basico' | 'personalizado';
-  onChangeDefaultPref: (pref: 'basico' | 'personalizado') => void;
+  defaultPref: 'basico' | 'basico_bastones' | 'personalizado';
+  onChangeDefaultPref: (pref: 'basico' | 'basico_bastones' | 'personalizado') => void;
 
   // Proyección de losa
   slabProjOffsetDraft: string;
@@ -69,7 +69,7 @@ export interface ConfigTabProps {
  * - Configuración general (d, unit_scale, x0, y0, recubrimiento)
  * - Texto de acero
  */
-export const ConfigTab: React.FC<ConfigTabProps> = ({
+const ConfigTabInner: React.FC<ConfigTabProps> = ({
   defaultPref,
   onChangeDefaultPref,
   slabProjOffsetDraft,
@@ -122,7 +122,8 @@ export const ConfigTab: React.FC<ConfigTabProps> = ({
         <label className="field">
           <div className="label">Proyección losa capa</div>
           <select className="input" value={slabProjLayerDraft} onChange={(e) => setSlabProjLayerDraft(e.target.value)}>
-            {Array.from(new Set(['-- SECCION CORTE', 'A-BEAM-LOSA-PROY', ...(templateLayers ?? [])])).map((ly) => (
+            <option value="">(Capa Casco)</option>
+            {Array.from(new Set(['A-BEAM-LOSA-PROY', ...(templateLayers ?? [])])).map((ly) => (
               <option key={ly} value={ly}>
                 {ly}
               </option>
@@ -278,3 +279,5 @@ export const ConfigTab: React.FC<ConfigTabProps> = ({
     </div>
   );
 };
+
+export const ConfigTab = React.memo(ConfigTabInner);
