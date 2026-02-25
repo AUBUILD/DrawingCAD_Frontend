@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import type { DevelopmentIn, PreviewResponse } from '../types';
-import type { AppConfig, Bounds } from '../services';
+import type { AppConfig, Bounds, QuantityDisplayState } from '../services';
 import {
   drawPreview,
   drawLabels,
@@ -20,6 +20,10 @@ interface UseDetailCanvasParams {
   showStirrups: boolean;
   recubrimiento: number;
   hookLegM: number;
+  selectedBastonDetailTags?: string[] | null;
+  selectedBastonDetailSpans?: number[] | null;
+  quantityDisplay?: QuantityDisplayState;
+  quantityCutsXU?: number[];
   selection: any;
   tab: string;
   steelViewPinned: boolean;
@@ -39,6 +43,10 @@ export function useDetailCanvas({
   showStirrups,
   recubrimiento,
   hookLegM,
+  selectedBastonDetailTags,
+  selectedBastonDetailSpans,
+  quantityDisplay,
+  quantityCutsXU,
   selection,
   tab,
   steelViewPinned,
@@ -99,7 +107,7 @@ export function useDetailCanvas({
       }
 
       // Dibujar acero en un segundo frame para evitar bloquear la primera pintura.
-      if (preview && renderBounds && steelViewActive && (showLongitudinal || showStirrups)) {
+      if (preview && renderBounds && steelViewActive && ((showLongitudinal || showStirrups) || Boolean(quantityDisplay?.enabled))) {
         previewOverlayRafRef.current = window.requestAnimationFrame(() => {
           try {
             // Vista de acero activa (pestaña Acero o anclada): dibujar overlay 2D.
@@ -108,8 +116,11 @@ export function useDetailCanvas({
                 showLongitudinal,
                 showStirrups,
                 yScale: steelViewActive && steelYScale2 ? 2 : 1,
+                highlightBastonTags: selectedBastonDetailTags ?? undefined,
+                highlightBastonSpans: selectedBastonDetailSpans ?? undefined,
               });
             }
+            // Cuantías se renderizan en Vista General (useOverviewCanvas) para una visualización más limpia.
           } catch (e) {
             console.warn('Error dibujando overlay 2D de acero', e);
           }
@@ -141,6 +152,8 @@ export function useDetailCanvas({
     showLongitudinal,
     showStirrups,
     steelYScale2,
+    quantityDisplay,
+    quantityCutsXU,
     previewPayloadInfo.key,
     previewCanvasResizeTick,
   ]);

@@ -1,12 +1,13 @@
 import { useEffect, useRef, useState } from 'react';
 import type { DevelopmentIn, PreviewResponse } from '../types';
-import type { Bounds, Selection } from '../services';
+import type { Bounds, Selection, QuantityDisplayState } from '../services';
 import {
   drawPreview,
   drawLabels,
   drawSelectionOverlay,
   drawCutMarker2D,
 } from '../services';
+import { drawQuantityOverlay } from '../canvas';
 
 interface UseOverviewCanvasParams {
   overviewCanvasRef: React.RefObject<HTMLCanvasElement | null>;
@@ -17,6 +18,9 @@ interface UseOverviewCanvasParams {
   showNT: boolean;
   steelViewActive: boolean;
   sectionXU: number;
+  recubrimiento: number;
+  quantityDisplay?: QuantityDisplayState;
+  quantityCutsXU?: number[];
   tab: string;
   steelViewPinned: boolean;
 }
@@ -30,6 +34,9 @@ export function useOverviewCanvas({
   showNT,
   steelViewActive,
   sectionXU,
+  recubrimiento,
+  quantityDisplay,
+  quantityCutsXU,
   tab,
   steelViewPinned,
 }: UseOverviewCanvasParams) {
@@ -81,6 +88,13 @@ export function useOverviewCanvas({
       if (steelViewActive && preview && renderBounds) {
         drawCutMarker2D(canvas, preview, renderBounds, sectionXU);
       }
+      if (preview && renderBounds && quantityDisplay?.enabled) {
+        drawQuantityOverlay(canvas, preview, dev, renderBounds, {
+          cutsXU: quantityCutsXU ?? [],
+          recubrimientoM: recubrimiento,
+          display: quantityDisplay,
+        });
+      }
     });
 
     return () => {
@@ -101,6 +115,9 @@ export function useOverviewCanvas({
     tab,
     steelViewPinned,
     sectionXU,
+    recubrimiento,
+    quantityDisplay,
+    quantityCutsXU,
     previewPayloadInfo.key,
     overviewCanvasResizeTick,
   ]);

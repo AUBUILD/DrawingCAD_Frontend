@@ -7,7 +7,7 @@ import {
   defaultDevelopment, toBackendPayload, toPreviewPayload, DEFAULT_APP_CFG,
   type AppConfig, nodeSteelKind, nodeToFaceEnabled,
   nodeBastonLineKind, nodeBastonLineToFaceEnabled, buildNodeSlots,
-  type Bounds, type Selection,
+  type Bounds, type Selection, type QuantityDisplayState,
 } from './services';
 import {
   clampNumber, clampInt, snap05m, formatOrdinalEs, parseDefaultPref,
@@ -45,10 +45,26 @@ export default function App() {
   const [previewView, setPreviewView] = useState<PreviewView>('2d');
   const [showLongitudinal, setShowLongitudinal] = useState(true);
   const [showStirrups, setShowStirrups] = useState(true);
+  const [quantityDisplay, setQuantityDisplay] = useState<QuantityDisplayState>({
+    enabled: true,
+    mode: 'zones',
+    show_p_min: false,
+    show_p_max: false,
+    show_p_instalada: false,
+    show_p_requerida: false,
+    show_As_min: false,
+    show_As_max: false,
+    show_As_instalada: true,
+    show_As_requerida: true,
+    show_margin: true,
+    show_compliance: false,
+  });
   const [steelYScale2, setSteelYScale2] = useState(false);
   const [threeOpacity, setThreeOpacity] = useState(20);
   const [steelViewPinned, setSteelViewPinned] = useState(false);
   const [selection, setSelection] = useState<Selection>({ kind: 'none' });
+  const [selectedBastonDetailTags, setSelectedBastonDetailTags] = useState<string[] | null>(null);
+  const [selectedBastonDetailSpans, setSelectedBastonDetailSpans] = useState<number[] | null>(null);
   const [detailViewport, setDetailViewport] = useState<Bounds | null>(null);
   const tabRef = useRef<Tab>(tab);
   const detailViewportRef = useRef<Bounds | null>(detailViewport);
@@ -154,6 +170,7 @@ export default function App() {
   } = useApiActions({
     dev, setDev, appCfg, setAppCfg,
     payload, savedCuts, cascoLayer, steelLayer, drawSteel, defaultPref,
+    quantityDisplay, sectionXU, recubrimientoM: appCfg.recubrimiento,
     setBusy, setError, setWarning,
     setTemplateName, setTemplateLayers, setCascoLayer, setSteelLayer,
     jsonText, setSaveStatus, setSelection, setDetailViewport, setConcretoLocked,
@@ -216,12 +233,20 @@ export default function App() {
     canvasRef, preview, detailViewport, dev, previewPayloadInfo,
     showNT, steelViewActive, steelYScale2, showLongitudinal, showStirrups,
     recubrimiento: appCfg.recubrimiento, hookLegM,
+    selectedBastonDetailTags,
+    selectedBastonDetailSpans,
+    quantityDisplay,
+    quantityCutsXU: [sectionXU, ...savedCuts.map((c) => c.xU)],
     selection, tab, steelViewPinned, sectionXU,
   });
 
   useOverviewCanvas({
     overviewCanvasRef, preview, dev, selection, previewPayloadInfo,
-    showNT, steelViewActive, sectionXU, tab, steelViewPinned,
+    showNT, steelViewActive, sectionXU,
+    recubrimiento: appCfg.recubrimiento,
+    quantityDisplay,
+    quantityCutsXU: [sectionXU, ...savedCuts.map((c) => c.xU)],
+    tab, steelViewPinned,
   });
 
   useEffect(() => {
@@ -251,13 +276,13 @@ export default function App() {
     showLongitudinal, showStirrups, hookLegM, threeProjection,
   });
 
-  useEffect(() => { if (zoomEnabled) return; setDetailViewport(null); setSelection({ kind: 'none' }); }, [zoomEnabled]);
+  useEffect(() => { if (zoomEnabled) return; setDetailViewport(null); setSelection({ kind: 'none' }); setSelectedBastonDetailTags(null); setSelectedBastonDetailSpans(null); }, [zoomEnabled]);
 
   useEffect(() => {
     const onKeyDown = (e: KeyboardEvent) => {
       if (e.key !== 'Escape') return;
       if (detailViewport) { setDetailViewport(null); e.preventDefault(); return; }
-      if (selection.kind !== 'none') { setSelection({ kind: 'none' }); e.preventDefault(); }
+      if (selection.kind !== 'none') { setSelection({ kind: 'none' }); setSelectedBastonDetailTags(null); setSelectedBastonDetailSpans(null); e.preventDefault(); }
     };
     window.addEventListener('keydown', onKeyDown);
     return () => window.removeEventListener('keydown', onKeyDown);
@@ -340,7 +365,21 @@ export default function App() {
             normalizeDiaKey, safeParseJson, getSteelLayoutSettings,
             clampNumber, fmt2,
           }}
-          metradoTabProps={{ dev, recubrimiento: appCfg.recubrimiento }}
+          metradoTabProps={{
+            dev,
+            recubrimiento: appCfg.recubrimiento,
+            quantityDisplay,
+            setQuantityDisplay,
+            onSelectBastonDetalleSpan: (spanIdx, tagsTxt, spansTxt) => {
+              setSelectedBastonDetailTags(tagsTxt ? tagsTxt.split('|').map((s) => s.trim()).filter(Boolean) : null);
+              setSelectedBastonDetailSpans(
+                spansTxt
+                  ? Array.from(spansTxt.matchAll(/T(\d+)/g)).map((m) => Number(m[1]) - 1).filter((n) => Number.isInteger(n) && n >= 0)
+                  : null
+              );
+              setSelection({ kind: 'span', index: spanIdx });
+            },
+          }}
           jsonTabProps={{ jsonText, setJsonText, onApply: applyJsonToForm }}
         />
       }
@@ -355,6 +394,7 @@ export default function App() {
             onCanvasClick, moveZoomSelection, setDetailViewport,
             showLongitudinal, setShowLongitudinal,
             showStirrups, setShowStirrups,
+            quantityDisplay, setQuantityDisplay,
             steelViewActive, steelYScale2, setSteelYScale2,
             threeOpacity, setThreeOpacity,
             savedCuts, setSavedCuts, sectionXU, setSectionXU,

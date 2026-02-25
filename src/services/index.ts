@@ -22,3 +22,6 @@ export * from './threeService';
 
 // App utilities
 export * from './appUtils';
+
+// Quantity / Cuantias helpers
+export * from './quantityService';

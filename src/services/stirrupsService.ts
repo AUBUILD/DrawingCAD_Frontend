@@ -98,28 +98,42 @@ export function stirrupsPositionsFromTokens(dev: DevelopmentIn, tokens: StirrupT
   const within = (v: number) => (dir > 0 ? v <= endU + 1e-6 : v >= endU - 1e-6);
   let cursor = faceU;
   const out: number[] = [];
+  let anchorBase: number | null = null;
 
-  for (const seg of tokens) {
+  for (let i = 0; i < tokens.length; i++) {
+    const seg = tokens[i];
     const spacingU = mToUnits(dev, clampNumber((seg as any).spacing_m ?? 0, 0));
     if (!(spacingU > 0)) continue;
-    const base = cursor + dir * spacingU;
+    let base = cursor + dir * spacingU;
     if (!within(base)) {
       // No cabe este segmento: saltar y probar el siguiente.
       // Esto permite que R aplique aunque C no quepa, por ejemplo.
       continue;
     }
 
+    if (i === 0 && seg.kind === 'count' && Math.floor(seg.count) === 1 && tokens.length > 1) {
+      anchorBase = base;
+      cursor = base;
+      continue;
+    }
+
     if (seg.kind === 'rest') {
+      if (anchorBase != null) base = anchorBase;
       const avail = Math.abs(endU - base);
       const n = Math.floor(avail / spacingU + 1e-12) + 1;
       for (let k = 0; k < n; k++) {
         const v = base + dir * spacingU * k;
         if (within(v)) out.push(v);
       }
+      anchorBase = null;
       break;
     }
 
-    const nReq = Math.max(1, Math.floor(seg.count));
+    let nReq = Math.max(1, Math.floor(seg.count));
+    if (anchorBase != null) {
+      base = anchorBase;
+      nReq += 1;
+    }
     let last = cursor;
     for (let k = 0; k < nReq; k++) {
       const v = base + dir * spacingU * k;
@@ -128,7 +142,10 @@ export function stirrupsPositionsFromTokens(dev: DevelopmentIn, tokens: StirrupT
       last = v;
     }
     cursor = last;
+    anchorBase = null;
   }
+
+  if (anchorBase != null) out.push(anchorBase);
 
   return out;
 }
@@ -209,15 +226,23 @@ export function stirrupsBlocksFromSpec(dev: DevelopmentIn, specText: string, fac
 
   const blocks: StirrupBlock[] = [];
   let cursor = faceU;
+  let anchorBase: number | null = null;
   for (let i = 0; i < tokens.length; i++) {
     const seg = tokens[i];
     const spacingU = mToUnits(dev, clampNumber((seg as any).spacing_m ?? 0, 0));
     if (!(spacingU > 0)) continue;
-    const base = cursor + dir * spacingU;
+    let base = cursor + dir * spacingU;
     if (!within(base)) continue;
+
+    if (i === 0 && seg.kind === 'count' && Math.floor(seg.count) === 1 && tokens.length > 1) {
+      anchorBase = base;
+      cursor = base;
+      continue;
+    }
 
     if (seg.kind === 'rest') {
       const positions: number[] = [];
+      if (anchorBase != null) base = anchorBase;
       const avail = Math.abs(endU - base);
       const n = Math.floor(avail / spacingU + 1e-12) + 1;
       for (let k = 0; k < n; k++) {
@@ -227,10 +252,15 @@ export function stirrupsBlocksFromSpec(dev: DevelopmentIn, specText: string, fac
         cursor = v;
       }
       if (positions.length) blocks.push({ key: 'r', positions });
+      anchorBase = null;
       break;
     }
 
-    const nReq = Math.max(1, Math.floor(seg.count));
+    let nReq = Math.max(1, Math.floor(seg.count));
+    if (anchorBase != null) {
+      base = anchorBase;
+      nReq += 1;
+    }
     const positions: number[] = [];
     for (let k = 0; k < nReq; k++) {
       const v = base + dir * spacingU * k;
@@ -239,7 +269,10 @@ export function stirrupsBlocksFromSpec(dev: DevelopmentIn, specText: string, fac
       cursor = v;
     }
     if (positions.length) blocks.push({ key: `seg${i + 1}`, positions });
+    anchorBase = null;
   }
+
+  if (anchorBase != null) blocks.push({ key: 'a', positions: [anchorBase] });
 
   return blocks;
 }
