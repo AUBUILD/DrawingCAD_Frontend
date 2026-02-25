@@ -253,6 +253,8 @@ export type SavedCut = {
 export type ExportDxfRequest = PreviewRequest & {
   // Cortes guardados para exportar secciones (backend acepta también saved_cuts)
   savedCuts?: SavedCut[];
+  // Metadata opcional de cuantías para textos/overlay en DXF (backend puede ignorarlo)
+  dxf_quantity_overlay?: any;
 };
 
 export type PreviewPolyline = {

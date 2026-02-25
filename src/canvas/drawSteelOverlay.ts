@@ -22,7 +22,7 @@ export function drawSteelOverlay(
   renderBounds: Bounds,
   recubrimientoM: number,
   hookLegM: number,
-  opts?: { showLongitudinal?: boolean; showStirrups?: boolean; yScale?: number }
+  opts?: { showLongitudinal?: boolean; showStirrups?: boolean; yScale?: number; highlightBastonTags?: string[]; highlightBastonSpans?: number[] }
 ) {
   const ctx = canvas.getContext('2d');
   if (!ctx) return;
@@ -30,6 +30,10 @@ export function drawSteelOverlay(
   const showLongitudinal = opts?.showLongitudinal ?? true;
   const showStirrups = opts?.showStirrups ?? true;
   const yScale = opts?.yScale ?? 1;
+  const highlightBastonTags = opts?.highlightBastonTags ?? [];
+  const highlightBastonSpans = opts?.highlightBastonSpans ?? [];
+  const highlightTagSet = new Set(highlightBastonTags.map((s) => String(s).trim()).filter(Boolean));
+  const highlightSpanSet = new Set(highlightBastonSpans.filter((n) => Number.isInteger(n) && n >= 0));
 
   const rect = canvas.getBoundingClientRect();
   const cssW = Math.max(1, Math.round(rect.width));
@@ -69,6 +73,24 @@ export function drawSteelOverlay(
   const bastonLcM = clampNumber((dev as any).baston_Lc ?? 0.5, 0.5);
   const bastonLcU = mToUnits(dev, bastonLcM);
   const bastonSpacingU = mToUnits(dev, 0.02);
+  const hasBastonHighlight = highlightTagSet.size > 0;
+  const spanAllowed = (spanIdx?: number) => highlightSpanSet.size === 0 || (typeof spanIdx === 'number' && highlightSpanSet.has(spanIdx));
+  const colorForTag = (tag: string, fallback: string, spanIdx?: number) => {
+    if (!hasBastonHighlight) return fallback;
+    return highlightTagSet.has(tag) && spanAllowed(spanIdx) ? 'rgba(251, 191, 36, 1)' : 'rgba(100, 116, 139, 0.25)';
+  };
+  const colorForAnyTag = (tags: Array<string | undefined>, fallback: string, spanIdx?: number) => {
+    if (!hasBastonHighlight) return fallback;
+    for (const t of tags) {
+      if (t && highlightTagSet.has(t) && spanAllowed(spanIdx)) return 'rgba(251, 191, 36, 1)';
+    }
+    return 'rgba(100, 116, 139, 0.25)';
+  };
+  const widthForTag = (tag: string, spanIdx?: number) => (highlightTagSet.has(tag) && spanAllowed(spanIdx) ? 3 : (hasBastonHighlight ? 1 : 2));
+  const widthForAnyTag = (tags: Array<string | undefined>, spanIdx?: number) => {
+    for (const t of tags) if (t && highlightTagSet.has(t) && spanAllowed(spanIdx)) return 3;
+    return hasBastonHighlight ? 1 : 2;
+  };
 
   function getBastonCfg(span: SpanIn, side: 'top' | 'bottom', zone: 'z1' | 'z2' | 'z3'): BastonCfg {
     const b = (span as any).bastones ?? {};
@@ -77,10 +99,13 @@ export function drawSteelOverlay(
     return normalizeBastonCfg(z);
   }
 
-  function drawBastonLines(x0: number, x1: number, yBase: number, _qty: number, towardCenterSign: 1 | -1, stroke: string) {
+  function drawBastonLines(x0: number, x1: number, yBase: number, _qty: number, towardCenterSign: 1 | -1, stroke: string, tag?: string, spanIdx?: number) {
     if (!ctx) return;
     const prev = ctx.strokeStyle;
-    ctx.strokeStyle = stroke;
+    const prevW = ctx.lineWidth;
+    const activeStroke = tag ? colorForTag(tag, stroke, spanIdx) : stroke;
+    ctx.strokeStyle = activeStroke;
+    if (tag) ctx.lineWidth = widthForTag(tag, spanIdx);
     // En el desarrollo 2D, una sola línea representa el grupo (qty no crea líneas paralelas).
     const y = yBase;
     const [cx0, cy] = toCanvas(x0, y);
@@ -90,8 +115,9 @@ export function drawSteelOverlay(
     ctx.lineTo(Math.round(cx1) + 0.5, Math.round(cy) + 0.5);
     ctx.stroke();
 
-    drawEndDots(x0, y, x1, y, stroke);
+    drawEndDots(x0, y, x1, y, activeStroke);
     ctx.strokeStyle = prev;
+    ctx.lineWidth = prevW;
   }
 
   // Zona 1: 2 líneas (según croquis)
@@ -220,12 +246,17 @@ export function drawSteelOverlay(
     kind: 'hook' | 'anchorage',
     side: 'top' | 'bottom',
     xFace?: number,
-    customLengthM?: number
+    customLengthM?: number,
+    tag?: string | string[],
+    spanIdx?: number,
   ) {
     const c = ctx;
     if (!c) return;
     const prevStroke = c.strokeStyle;
-    c.strokeStyle = extraStroke;
+    const prevW = c.lineWidth;
+    const tagList = Array.isArray(tag) ? tag : (tag ? [tag] : []);
+    c.strokeStyle = tagList.length ? colorForAnyTag(tagList, extraStroke, spanIdx) : extraStroke;
+    if (tagList.length) c.lineWidth = widthForAnyTag(tagList, spanIdx);
     const x2 = (() => {
       if (typeof xFace === 'number' && Number.isFinite(xFace)) {
         // Offset interior: separar del borde por recubrimiento.
@@ -255,6 +286,7 @@ export function drawSteelOverlay(
     }
     c.stroke();
     c.strokeStyle = prevStroke;
+    c.lineWidth = prevW;
   }
 
   // Líneas por tramo (superior + inferior) + nodos
@@ -504,12 +536,12 @@ export function drawSteelOverlay(
           const x1 = Math.min(x1Side, x0Side + L3_u);
           if (x1 > x0 + 1e-6) {
             // Línea 1 (exterior)
-            if (cfg.l1_enabled) drawBastonLines(x0, x1, yBase, 1, sign, bastonL1Stroke);
+            if (cfg.l1_enabled) drawBastonLines(x0, x1, yBase, 1, sign, bastonL1Stroke, `${side}.z1.L1`, i);
 
             // Línea 2 (interior)
             const x1Inner = x1 - bastonLcU;
             if (cfg.l2_enabled && x1Inner > x0 + 1e-6) {
-              drawBastonLines(x0, x1Inner, yBase + sign * coverU, 1, sign, bastonL2Stroke);
+              drawBastonLines(x0, x1Inner, yBase + sign * coverU, 1, sign, bastonL2Stroke, `${side}.z1.L2`, i);
             }
           }
 
@@ -533,7 +565,13 @@ export function drawSteelOverlay(
                 if (kEnd === 'hook' || kEnd === 'development') {
                   const kind = kEnd === 'hook' ? 'hook' : 'anchorage';
                   const xFace = xFaceFor(1);
-                  drawHookOrAnchorage(x0, yBase, -1, dia, kind, side, xFace);
+                  drawHookOrAnchorage(
+                    x0, yBase, -1, dia, kind, side, xFace, undefined,
+                    kind === 'hook'
+                      ? [`${side}.z1.L1.ext`, `${side}.z1.L1.hook`]
+                      : `${side}.z1.L1.ext`,
+                    i
+                  );
                 }
               }
             }
@@ -548,7 +586,13 @@ export function drawSteelOverlay(
                   if (kEnd === 'hook' || kEnd === 'development') {
                     const kind = kEnd === 'hook' ? 'hook' : 'anchorage';
                     const xFace = xFaceFor(2);
-                    drawHookOrAnchorage(x0, yBase + sign * coverU, -1, dia, kind, side, xFace);
+                    drawHookOrAnchorage(
+                      x0, yBase + sign * coverU, -1, dia, kind, side, xFace, undefined,
+                      kind === 'hook'
+                        ? [`${side}.z1.L2.ext`, `${side}.z1.L2.hook`]
+                        : `${side}.z1.L2.ext`,
+                      i
+                    );
                   }
                 }
               }
@@ -569,11 +613,11 @@ export function drawSteelOverlay(
           const x0 = x0Side + L1_u;
           const x1 = x1Side - L2_u;
           if (x1 > x0 + 1e-6) {
-            if (cfg.l1_enabled) drawBastonLines(x0, x1, yBase, 1, sign, bastonL1Stroke);
+            if (cfg.l1_enabled) drawBastonLines(x0, x1, yBase, 1, sign, bastonL1Stroke, `${side}.z2.L1`, i);
             const x0Inner = x0 + bastonLcU;
             const x1Inner = x1 - bastonLcU;
             if (cfg.l2_enabled && x1Inner > x0Inner + 1e-6) {
-              drawBastonLines(x0Inner, x1Inner, yBase + sign * coverU, 1, sign, bastonL2Stroke);
+              drawBastonLines(x0Inner, x1Inner, yBase + sign * coverU, 1, sign, bastonL2Stroke, `${side}.z2.L2`, i);
             }
           }
         }
@@ -589,10 +633,10 @@ export function drawSteelOverlay(
           const x1 = x1Side;
           const x0 = Math.max(x0Side, x1Side - L3_u);
           if (x1 > x0 + 1e-6) {
-            if (cfg.l1_enabled) drawBastonLines(x0, x1, yBase, 1, sign, bastonL1Stroke);
+            if (cfg.l1_enabled) drawBastonLines(x0, x1, yBase, 1, sign, bastonL1Stroke, `${side}.z3.L1`, i);
             const x0Inner = x0 + bastonLcU;
             if (cfg.l2_enabled && x1 > x0Inner + 1e-6) {
-              drawBastonLines(x0Inner, x1, yBase + sign * coverU, 1, sign, bastonL2Stroke);
+              drawBastonLines(x0Inner, x1, yBase + sign * coverU, 1, sign, bastonL2Stroke, `${side}.z3.L2`, i);
             }
           }
 
@@ -616,7 +660,13 @@ export function drawSteelOverlay(
                 if (kEnd === 'hook' || kEnd === 'development') {
                   const kind = kEnd === 'hook' ? 'hook' : 'anchorage';
                   const xFace = xFaceFor(1);
-                  drawHookOrAnchorage(x1, yBase, +1, dia, kind, side, xFace);
+                  drawHookOrAnchorage(
+                    x1, yBase, +1, dia, kind, side, xFace, undefined,
+                    kind === 'hook'
+                      ? [`${side}.z3.L1.ext`, `${side}.z3.L1.hook`]
+                      : `${side}.z3.L1.ext`,
+                    i
+                  );
                 }
               }
             }
@@ -631,7 +681,13 @@ export function drawSteelOverlay(
                   if (kEnd === 'hook' || kEnd === 'development') {
                     const kind = kEnd === 'hook' ? 'hook' : 'anchorage';
                     const xFace = xFaceFor(2);
-                    drawHookOrAnchorage(x1, yBase + sign * coverU, +1, dia, kind, side, xFace);
+                    drawHookOrAnchorage(
+                      x1, yBase + sign * coverU, +1, dia, kind, side, xFace, undefined,
+                      kind === 'hook'
+                        ? [`${side}.z3.L2.ext`, `${side}.z3.L2.hook`]
+                        : `${side}.z3.L2.ext`,
+                      i
+                    );
                   }
                 }
               }
@@ -683,7 +739,11 @@ export function drawSteelOverlay(
 
       for (const line of [1, 2] as const) {
         const stroke = line === 1 ? bastonL1Stroke : bastonL2Stroke;
-        ctx.strokeStyle = stroke;
+        const topBridgeTag = `top.z3z1.L${line}.bridge`;
+        const botBridgeTag = `bottom.z3z1.L${line}.bridge`;
+        const prevWBridge = ctx.lineWidth;
+        ctx.strokeStyle = colorForAnyTag([topBridgeTag], stroke, i - 1);
+        ctx.lineWidth = widthForAnyTag([topBridgeTag], i - 1);
         const topK1 = nodeBastonLineKind(node, 'top', 1, line);
         const topK2 = nodeBastonLineKind(node, 'top', 2, line);
         const botK1 = nodeBastonLineKind(node, 'bottom', 1, line);
@@ -720,12 +780,14 @@ export function drawSteelOverlay(
               ctx.stroke();
 
               // puntos inicio/fin (como acero corrido)
-              drawEndDots(xTopL, yL, xTopR, yR, stroke);
+              drawEndDots(xTopL, yL, xTopR, yR, colorForTag(topBridgeTag, stroke));
             }
           }
         }
 
         // BOTTOM: continuo solo si ambos extremos son continuos y existen bastones a ambos lados
+        ctx.strokeStyle = colorForAnyTag([botBridgeTag], stroke, i - 1);
+        ctx.lineWidth = widthForAnyTag([botBridgeTag], i - 1);
         if (botK1 === 'continuous' && botK2 === 'continuous') {
           const leftEnabled = line === 1 ? cfgBotL.l1_enabled : cfgBotL.l2_enabled;
           const rightEnabled = line === 1 ? cfgBotR.l1_enabled : cfgBotR.l2_enabled;
@@ -747,10 +809,11 @@ export function drawSteelOverlay(
               ctx.stroke();
 
               // puntos inicio/fin (como acero corrido)
-              drawEndDots(xBotL, y, xBotR, y, stroke);
+              drawEndDots(xBotL, y, xBotR, y, colorForTag(botBridgeTag, stroke));
             }
           }
         }
+        ctx.lineWidth = prevWBridge;
       }
     }
     ctx.strokeStyle = prev;

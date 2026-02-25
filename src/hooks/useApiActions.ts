@@ -5,6 +5,7 @@ import {
   normalizeDev,
   defaultDevelopment,
   INITIAL_SPAN,
+  buildQuantityExportOverlayPayload,
 } from '../services';
 import {
   applyBasicPreferenceToNodes,
@@ -37,6 +38,9 @@ interface UseApiActionsParams {
   cascoLayer: string;
   steelLayer: string;
   drawSteel: boolean;
+  quantityDisplay: any;
+  sectionXU: number;
+  recubrimientoM: number;
   defaultPref: DefaultPreferenceId;
   setBusy: React.Dispatch<React.SetStateAction<boolean>>;
   setError: React.Dispatch<React.SetStateAction<string | null>>;
@@ -62,6 +66,9 @@ export function useApiActions({
   cascoLayer,
   steelLayer,
   drawSteel,
+  quantityDisplay,
+  sectionXU,
+  recubrimientoM,
   defaultPref,
   setBusy,
   setError,
@@ -107,14 +114,18 @@ export function useApiActions({
   const onExportDxf = useCallback(async () => {
     try {
       setBusy(true);
-      const blob = await exportDxf({ ...payload, savedCuts }, { cascoLayer, steelLayer, drawSteel });
+      const dxfQuantityOverlay = buildQuantityExportOverlayPayload(dev, recubrimientoM, sectionXU, quantityDisplay);
+      const blob = await exportDxf(
+        { ...payload, savedCuts, dxf_quantity_overlay: dxfQuantityOverlay } as any,
+        { cascoLayer, steelLayer, drawSteel }
+      );
       downloadBlob(blob, `beamdrawing-${(dev.name ?? 'desarrollo').replace(/\s+/g, '_')}.dxf`);
     } catch (e: any) {
       setError(e?.message ?? String(e));
     } finally {
       setBusy(false);
     }
-  }, [payload, savedCuts, cascoLayer, steelLayer, drawSteel, dev.name, setBusy, setError]);
+  }, [payload, savedCuts, cascoLayer, steelLayer, drawSteel, dev.name, dev, recubrimientoM, sectionXU, quantityDisplay, setBusy, setError]);
 
   const onUploadTemplate = useCallback(async (file: File) => {
     try {

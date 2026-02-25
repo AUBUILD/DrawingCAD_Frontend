@@ -1,5 +1,5 @@
-/**
- * Servicios para cálculos relacionados con acero y nodos
+﻿/**
+ * Servicios para cÃ¡lculos relacionados con acero y nodos
  */
 
 import type { NodeIn, SpanIn, SteelKind, SupportType } from '../types';
@@ -122,9 +122,9 @@ export function buildNodeSlots(nodes: NodeIn[]): NodeSlot[] {
 }
 
 /**
- * Calcula la longitud de acero en el nodo según el tipo de apoyo.
+ * Calcula la longitud de acero en el nodo segÃºn el tipo de apoyo.
  *
- * Esta función implementa la lógica de la Preferencia 01: Básico para determinar
+ * Esta funciÃ³n implementa la lÃ³gica de la Preferencia 01: BÃ¡sico para determinar
  * la longitud del tramo de barra (gancho, anclaje o continua) dentro del nodo.
  *
  * @param node - El nodo donde se calcula la longitud
@@ -147,7 +147,7 @@ export function calculateNodeSteelLength(node: NodeIn, defaultLength: number = 0
   // Sino si nodo es placa o apoyo intermedio:
   if (supportType === 'placa' || supportType === 'apoyo_intermedio') {
     // Longitud = 80 cm, o x2 - x1 si se conoce el ancho real de la placa
-    // Por ahora usamos 80 cm por defecto. Si hay b1 y b2, podríamos calcular el ancho.
+    // Por ahora usamos 80 cm por defecto. Si hay b1 y b2, podrÃ­amos calcular el ancho.
     const nodeWidth = Math.abs((node.b2 || 0) - (node.b1 || 0));
     if (nodeWidth > 0.01) {
       return nodeWidth; // Usar el ancho real del nodo
@@ -160,14 +160,14 @@ export function calculateNodeSteelLength(node: NodeIn, defaultLength: number = 0
 }
 
 // ============================================================================
-// PREFERENCIA 01: BÁSICO - Configuración automática de acero en nodos
+// PREFERENCIA 01: BÃSICO - ConfiguraciÃ³n automÃ¡tica de acero en nodos
 // ============================================================================
 
 /**
- * Constantes para la Preferencia 01: Básico
+ * Constantes para la Preferencia 01: BÃ¡sico
  */
 const BASIC_PREF = {
-  // Acero corrido estándar: 2Ø5/8" (qty = cantidad, diameter = diámetro)
+  // Acero corrido estÃ¡ndar: 2Ã˜5/8" (qty = cantidad, diameter = diÃ¡metro)
   ACERO_CORRIDO_SUPERIOR: { qty: 2, diameter: '5/8' },
   ACERO_CORRIDO_INFERIOR: { qty: 2, diameter: '5/8' },
 
@@ -184,7 +184,7 @@ const BASIC_PREF = {
 } as const;
 
 /**
- * Configuración resultante para un lado del nodo
+ * ConfiguraciÃ³n resultante para un lado del nodo
  */
 export interface NodeSteelConfig {
   kind: SteelKind;
@@ -193,7 +193,7 @@ export interface NodeSteelConfig {
 }
 
 /**
- * Configuración completa de acero para un nodo
+ * ConfiguraciÃ³n completa de acero para un nodo
  */
 export interface NodeSteelSetup {
   nodeIndex: number;
@@ -202,7 +202,7 @@ export interface NodeSteelSetup {
   isIntermediateNode: boolean;
   columnLength: number; // x2 - x1 en metros
 
-  // Configuración para acero corrido
+  // ConfiguraciÃ³n para acero corrido
   top1: NodeSteelConfig; // Superior lado 1 (izquierdo)
   top2: NodeSteelConfig; // Superior lado 2 (derecho)
   bottom1: NodeSteelConfig; // Inferior lado 1 (izquierdo)
@@ -210,9 +210,9 @@ export interface NodeSteelSetup {
 }
 
 /**
- * Aplica la Preferencia 01: Básico a un array de nodos.
- * Configura automáticamente el tipo de conexión del acero (gancho, anclaje, continuo)
- * en cada nodo según su posición y la longitud de la columna.
+ * Aplica la Preferencia 01: BÃ¡sico a un array de nodos.
+ * Configura automÃ¡ticamente el tipo de conexiÃ³n del acero (gancho, anclaje, continuo)
+ * en cada nodo segÃºn su posiciÃ³n y la longitud de la columna.
  *
  * @param nodes - Array de nodos a configurar
  * @returns Array de configuraciones de acero para cada nodo
@@ -235,11 +235,11 @@ export function applyBasicPreference(nodes: NodeIn[]): NodeSteelSetup[] {
     let bottom1: NodeSteelConfig;
     let bottom2: NodeSteelConfig;
 
-    // ═══════════════════════════════════════════════════════════════════
+    // â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
     // NODOS DE INICIO Y FIN (extremos)
-    // ═══════════════════════════════════════════════════════════════════
+    // â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
     if (isStartNode || isEndNode) {
-      // ─── ACERO SUPERIOR ───
+      // â”€â”€â”€ ACERO SUPERIOR â”€â”€â”€
       if (columnLength <= BASIC_PREF.UMBRAL_GANCHO_EXTREMOS) {
         // Gancho (con check para adaptar a espacio si es necesario)
         const topConfig: NodeSteelConfig = {
@@ -259,7 +259,7 @@ export function applyBasicPreference(nodes: NodeIn[]): NodeSteelSetup[] {
         top2 = topConfig;
       }
 
-      // ─── ACERO INFERIOR ───
+      // â”€â”€â”€ ACERO INFERIOR â”€â”€â”€
       if (columnLength <= BASIC_PREF.UMBRAL_GANCHO_EXTREMOS) {
         // Gancho (con check para adaptar a espacio)
         const bottomConfig: NodeSteelConfig = {
@@ -279,11 +279,11 @@ export function applyBasicPreference(nodes: NodeIn[]): NodeSteelSetup[] {
         bottom2 = bottomConfig;
       }
     }
-    // ═══════════════════════════════════════════════════════════════════
+    // â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
     // NODOS INTERMEDIOS
-    // ═══════════════════════════════════════════════════════════════════
+    // â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
     else if (isIntermediateNode) {
-      // ─── ACERO SUPERIOR ───
+      // â”€â”€â”€ ACERO SUPERIOR â”€â”€â”€
       if (columnLength <= BASIC_PREF.UMBRAL_CONTINUO_SUPERIOR) {
         // Continuo
         const topConfig: NodeSteelConfig = {
@@ -303,7 +303,7 @@ export function applyBasicPreference(nodes: NodeIn[]): NodeSteelSetup[] {
         top2 = topConfig;
       }
 
-      // ─── ACERO INFERIOR ───
+      // â”€â”€â”€ ACERO INFERIOR â”€â”€â”€
       if (columnLength <= BASIC_PREF.UMBRAL_CONTINUO_INFERIOR) {
         // Continuo
         const bottomConfig: NodeSteelConfig = {
@@ -323,7 +323,7 @@ export function applyBasicPreference(nodes: NodeIn[]): NodeSteelSetup[] {
         bottom2 = bottomConfig;
       }
     } else {
-      // Caso por defecto (no debería ocurrir)
+      // Caso por defecto (no deberÃ­a ocurrir)
       const defaultConfig: NodeSteelConfig = {
         kind: 'continuous',
         toFace: false,
@@ -351,7 +351,7 @@ export function applyBasicPreference(nodes: NodeIn[]): NodeSteelSetup[] {
 }
 
 // ============================================================================
-// RESET DE ACERO — limpia todas las propiedades de steel/baston en nodos y spans
+// RESET DE ACERO â€” limpia todas las propiedades de steel/baston en nodos y spans
 // ============================================================================
 
 const STEEL_NODE_KEYS = [
@@ -387,8 +387,8 @@ export function resetAllSteel(nodes: NodeIn[], spans: SpanIn[]): void {
 }
 
 /**
- * Aplica la configuración de Preferencia 01: Básico a los spans,
- * configurando el acero corrido estándar (2Ø5/8" superior e inferior)
+ * Aplica la configuraciÃ³n de Preferencia 01: BÃ¡sico a los spans,
+ * configurando el acero corrido estÃ¡ndar (2Ã˜5/8" superior e inferior)
  *
  * @param spans - Array de spans a modificar (se modifica in-place)
  * @returns Array de spans modificados
@@ -397,13 +397,13 @@ export function applyBasicPreferenceToSpans(spans: SpanIn[]): SpanIn[] {
   for (let i = 0; i < spans.length; i++) {
     const span = spans[i];
 
-    // Configurar acero corrido superior: 2Ø5/8"
+    // Configurar acero corrido superior: 2Ã˜5/8"
     (span as any).steel_top = {
       qty: BASIC_PREF.ACERO_CORRIDO_SUPERIOR.qty,
       diameter: BASIC_PREF.ACERO_CORRIDO_SUPERIOR.diameter,
     };
 
-    // Configurar acero corrido inferior: 2Ø5/8"
+    // Configurar acero corrido inferior: 2Ã˜5/8"
     (span as any).steel_bottom = {
       qty: BASIC_PREF.ACERO_CORRIDO_INFERIOR.qty,
       diameter: BASIC_PREF.ACERO_CORRIDO_INFERIOR.diameter,
@@ -415,7 +415,7 @@ export function applyBasicPreferenceToSpans(spans: SpanIn[]): SpanIn[] {
 }
 
 /**
- * Aplica la configuración de Preferencia 01: Básico directamente a los nodos,
+ * Aplica la configuraciÃ³n de Preferencia 01: BÃ¡sico directamente a los nodos,
  * modificando sus propiedades steel_top_*_kind, steel_bottom_*_kind, etc.
  *
  * @param nodes - Array de nodos a modificar (se modifica in-place)
@@ -428,13 +428,13 @@ export function applyBasicPreferenceToNodes(nodes: NodeIn[]): NodeIn[] {
     const config = configs[i];
     const node = nodes[i];
 
-    // Aplicar configuración superior
+    // Aplicar configuraciÃ³n superior
     (node as any).steel_top_1_kind = config.top1.kind;
     (node as any).steel_top_2_kind = config.top2.kind;
     (node as any).steel_top_1_to_face = config.top1.toFace;
     (node as any).steel_top_2_to_face = config.top2.toFace;
 
-    // Aplicar configuración inferior
+    // Aplicar configuraciÃ³n inferior
     (node as any).steel_bottom_1_kind = config.bottom1.kind;
     (node as any).steel_bottom_2_kind = config.bottom2.kind;
     (node as any).steel_bottom_1_to_face = config.bottom1.toFace;
@@ -461,12 +461,12 @@ export function applyBasicPreferenceToNodes(nodes: NodeIn[]): NodeIn[] {
 }
 
 // ============================================================================
-// PREFERENCIA 02: BÁSICO + BASTONES
+// PREFERENCIA 02: BÃSICO + BASTONES
 // ============================================================================
 
 /**
- * Configuración por defecto de bastones para un zone de un span.
- * L1 y L2 habilitados con 2Ø5/8".
+ * ConfiguraciÃ³n por defecto de bastones para un zone de un span.
+ * L1 y L2 habilitados con 2Ã˜5/8".
  */
 function defaultBastonCfg(): {
   l1_enabled: boolean; l1_qty: number; l1_diameter: string;
@@ -481,8 +481,8 @@ function defaultBastonCfg(): {
 /**
  * Aplica Preferencia 02 a los spans: todo lo de Pref 01 + bastones por defecto.
  *
- * Superior: Z1 y Z3 activados (L1+L2, 2Ø5/8")
- * Inferior: Z2 activado (L1+L2, 2Ø5/8")
+ * Superior: Z1 y Z3 activados (L1+L2, 2Ã˜5/8")
+ * Inferior: Z2 activado (L1+L2, 2Ã˜5/8")
  */
 export function applyBasicBastonesPreferenceToSpans(spans: SpanIn[], nodes: NodeIn[]): SpanIn[] {
   // Primero aplicar Pref 01 (acero corrido)
@@ -492,7 +492,7 @@ export function applyBasicBastonesPreferenceToSpans(spans: SpanIn[], nodes: Node
    * Verifica si el acero corrido realmente ancla en un nodo/lado/end.
    * Requiere que:
    * 1. El kind no sea 'continuous'
-   * 2. El ancho de columna >= longitud mínima de anclaje según REBAR_TABLE_CM
+   * 2. El ancho de columna >= longitud mÃ­nima de anclaje segÃºn REBAR_TABLE_CM
    */
   function steelTrulyAnchors(
     node: any, side: 'top' | 'bottom', end: 1 | 2, dia: string,
@@ -505,33 +505,40 @@ export function applyBasicBastonesPreferenceToSpans(spans: SpanIn[], nodes: Node
       ? Math.abs((node.b2 ?? 0) - (node.b1 ?? 0))
       : Math.abs((node.a2 ?? 0) - (node.a1 ?? 0));
 
-    // Longitud mínima de anclaje desde la tabla
+    // Longitud mÃ­nima de anclaje desde la tabla
     const minLen = lengthFromTableMeters(
       dia, kind === 'hook' ? 'hook' : 'anchorage', side,
     );
 
     return colWidth >= minLen;
   }
-
+  // Pref 02: el filtro de anclaje real aplica solo en nodos extremos.
+  // En nodos intermedios, los bastones se habilitan por preferencia.
+  function pref02AllowsBastonAtNode(
+    nodeIdx: number, side: 'top' | 'bottom', end: 1 | 2, dia: string,
+  ): boolean {
+    const isExtremeNode = nodeIdx === 0 || nodeIdx === nodes.length - 1;
+    if (!isExtremeNode) return true;
+    const node = (nodes[nodeIdx] ?? {}) as any;
+    return steelTrulyAnchors(node, side, end, dia);
+  }
   for (let i = 0; i < spans.length; i++) {
     const span = spans[i] as any;
-    const leftNode = (nodes[i] ?? {}) as any;
-    const rightNode = (nodes[i + 1] ?? {}) as any;
 
-    // Diámetros del acero corrido de este tramo
+    // DiÃ¡metros del acero corrido de este tramo
     const topDia = span.steel_top?.diameter ?? '5/8';
     const botDia = span.steel_bottom?.diameter ?? '5/8';
 
-    // Verificar si el acero realmente ancla (cumple dimensión mínima)
-    const topLeftAnchors = steelTrulyAnchors(leftNode, 'top', 2, topDia);
-    const topRightAnchors = steelTrulyAnchors(rightNode, 'top', 1, topDia);
-    const botLeftAnchors = steelTrulyAnchors(leftNode, 'bottom', 2, botDia);
-    const botRightAnchors = steelTrulyAnchors(rightNode, 'bottom', 1, botDia);
+    // Verificar anclaje real solo en extremos; en intermedios se habilita por preferencia
+    const topLeftAnchors = pref02AllowsBastonAtNode(i, 'top', 2, topDia);
+    const topRightAnchors = pref02AllowsBastonAtNode(i + 1, 'top', 1, topDia);
+    const botLeftAnchors = pref02AllowsBastonAtNode(i, 'bottom', 2, botDia);
+    const botRightAnchors = pref02AllowsBastonAtNode(i + 1, 'bottom', 1, botDia);
 
     const hasTopBastones = topLeftAnchors || topRightAnchors;
     const hasBotBastones = botLeftAnchors || botRightAnchors;
 
-    // Si no hay anclaje válido en ningún lado, no agregar bastones
+    // Si no hay lados habilitados (tras regla de extremos/intermedios), no agregar bastones
     if (!hasTopBastones && !hasBotBastones) continue;
 
     // Inicializar bastones si no existen
@@ -539,12 +546,12 @@ export function applyBasicBastonesPreferenceToSpans(spans: SpanIn[], nodes: Node
     if (!span.bastones.top) span.bastones.top = {};
     if (!span.bastones.bottom) span.bastones.bottom = {};
 
-    // Superior: Z1 solo si ancla en nodo izquierdo, Z3 solo si ancla en nodo derecho
+    // Superior: Z1/Z3 segÃºn lado habilitado (extremos validan anclaje real; intermedios pasan)
     span.bastones.top.z1 = topLeftAnchors ? { ...defaultBastonCfg() } : (span.bastones.top.z1 ?? {});
     span.bastones.top.z2 = span.bastones.top.z2 ?? {};
     span.bastones.top.z3 = topRightAnchors ? { ...defaultBastonCfg() } : (span.bastones.top.z3 ?? {});
 
-    // Inferior: Z2 solo si ancla en algún lado
+    // Inferior: Z2 si al menos un lado del tramo queda habilitado
     span.bastones.bottom.z1 = span.bastones.bottom.z1 ?? {};
     span.bastones.bottom.z2 = hasBotBastones ? { ...defaultBastonCfg() } : (span.bastones.bottom.z2 ?? {});
     span.bastones.bottom.z3 = span.bastones.bottom.z3 ?? {};
@@ -573,7 +580,7 @@ export function applyBasicBastonesPreferenceToNodes(nodes: NodeIn[]): NodeIn[] {
         // Aplicar el mismo kind a L1 y L2 de los bastones
         node[`baston_${side}_${end}_l1_kind`] = steelKind;
         node[`baston_${side}_${end}_l2_kind`] = steelKind;
-        // Aplicar el mismo to_face a L1 y L2 de los bastones (misma lógica que acero corrido)
+        // Aplicar el mismo to_face a L1 y L2 de los bastones (misma lÃ³gica que acero corrido)
         node[`baston_${side}_${end}_l1_to_face`] = steelToFace;
         node[`baston_${side}_${end}_l2_to_face`] = steelToFace;
       }
@@ -582,3 +589,5 @@ export function applyBasicBastonesPreferenceToNodes(nodes: NodeIn[]): NodeIn[] {
 
   return nodes;
 }
+
+

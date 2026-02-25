@@ -1,5 +1,6 @@
 import React from 'react';
 import type { DevelopmentIn, PreviewResponse } from '../../types';
+import type { QuantityDisplayState } from '../../services';
 
 type PreviewView = '2d' | '3d';
 type ThreeProjection = 'perspective' | 'orthographic';
@@ -55,6 +56,8 @@ export interface PreviewPanelProps {
   setShowLongitudinal: (show: boolean) => void;
   showStirrups: boolean;
   setShowStirrups: (show: boolean) => void;
+  quantityDisplay: QuantityDisplayState;
+  setQuantityDisplay: React.Dispatch<React.SetStateAction<QuantityDisplayState>>;
   steelViewActive: boolean;
   steelYScale2: boolean;
   setSteelYScale2: (scale: boolean) => void;
@@ -111,6 +114,8 @@ const PreviewPanelInner: React.FC<PreviewPanelProps> = ({
   setShowLongitudinal,
   showStirrups,
   setShowStirrups,
+  quantityDisplay,
+  setQuantityDisplay,
   steelViewActive,
   steelYScale2,
   setSteelYScale2,
