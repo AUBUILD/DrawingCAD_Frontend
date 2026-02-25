@@ -216,7 +216,8 @@ export function useThreeScene({
       renderer.domElement.remove();
       threeRef.current = null;
     };
-  }, [previewView, threeProjection]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [previewView]);
 
   // Inicializar escena 3D overview (estática, sin zoom/pan/rotate)
   useEffect(() => {
@@ -319,7 +320,8 @@ export function useThreeScene({
       renderer.domElement.remove();
       threeOverviewRef.current = null;
     };
-  }, [previewView, threeProjection]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [previewView]);
 
   // Cambiar proyección 3D sin reconstruir geometría.
   useEffect(() => {

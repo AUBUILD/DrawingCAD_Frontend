@@ -209,12 +209,13 @@ export function useDataMutations(
       // Aplicar preferencia de acero en nodos y spans
       if (defaultPref === 'basico' || defaultPref === 'basico_bastones') {
         const applyN = defaultPref === 'basico_bastones' ? applyBasicBastonesPreferenceToNodes : applyBasicPreferenceToNodes;
-        const applyS = defaultPref === 'basico_bastones' ? applyBasicBastonesPreferenceToSpans : applyBasicPreferenceToSpans;
         if (nodes.length > 0) {
           nodes = applyN(nodes);
         }
         if (spans.length > 0) {
-          spans = applyS(spans);
+          spans = defaultPref === 'basico_bastones'
+            ? applyBasicBastonesPreferenceToSpans(spans, nodes)
+            : applyBasicPreferenceToSpans(spans);
         }
       }
 

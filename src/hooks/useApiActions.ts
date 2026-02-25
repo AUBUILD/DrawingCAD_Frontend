@@ -170,7 +170,6 @@ export function useApiActions({
       // Aplicar preferencia de acero en nodos y spans
       if (defaultPref === 'basico' || defaultPref === 'basico_bastones') {
         const applyN = defaultPref === 'basico_bastones' ? applyBasicBastonesPreferenceToNodes : applyBasicPreferenceToNodes;
-        const applyS = defaultPref === 'basico_bastones' ? applyBasicBastonesPreferenceToSpans : applyBasicPreferenceToSpans;
         let updatedNodes = incoming.nodes;
         let updatedSpans = incoming.spans;
 
@@ -178,7 +177,9 @@ export function useApiActions({
           updatedNodes = applyN([...incoming.nodes]);
         }
         if (incoming.spans && incoming.spans.length > 0) {
-          updatedSpans = applyS([...incoming.spans]);
+          updatedSpans = defaultPref === 'basico_bastones'
+            ? applyBasicBastonesPreferenceToSpans([...incoming.spans], updatedNodes)
+            : applyBasicPreferenceToSpans([...incoming.spans]);
         }
 
         incoming = { ...incoming, nodes: updatedNodes, spans: updatedSpans };

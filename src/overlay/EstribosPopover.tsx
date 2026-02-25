@@ -1,6 +1,6 @@
 import React, { useState, useMemo, useCallback } from 'react';
-import type { SpanIn, StirrupsDistributionIn, StirrupsSectionIn, StirrupsCaseType } from '../../types';
-import { pickDefaultABCRForH, formatStirrupsABCR, parseStirrupsABCR } from '../../utils/stirrupsUtils';
+import type { SpanIn, StirrupsDistributionIn, StirrupsSectionIn, StirrupsCaseType } from '../types';
+import { pickDefaultABCRForH, formatStirrupsABCR, parseStirrupsABCR } from '../utils/stirrupsUtils';
 import { PopoverShell } from './PopoverShell';
 
 // ============================================================================

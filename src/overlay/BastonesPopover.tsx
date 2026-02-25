@@ -1,5 +1,5 @@
 import React, { useCallback } from 'react';
-import type { SpanIn, NodeIn, BastonCfg, SteelKind } from '../../types';
+import type { SpanIn, NodeIn, BastonCfg, SteelKind } from '../types';
 import { PopoverShell } from './PopoverShell';
 
 // ============================================================================

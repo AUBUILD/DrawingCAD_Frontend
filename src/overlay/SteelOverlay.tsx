@@ -1,7 +1,7 @@
 import React, { useMemo, useState, useCallback, useRef, useEffect } from 'react';
-import type { DevelopmentIn, PreviewResponse, SpanIn, NodeIn, BastonCfg, StirrupsDistributionIn, StirrupsSectionIn } from '../../types';
-import { canvasMapper, type Bounds } from '../../services/canvasService';
-import { computeNodeOrigins, computeSpanMidX, computeSpanRangeX } from '../../services/geometryService';
+import type { DevelopmentIn, PreviewResponse, SpanIn, NodeIn, BastonCfg, StirrupsDistributionIn, StirrupsSectionIn } from '../types';
+import { canvasMapper, type Bounds } from '../services/canvasService';
+import { computeNodeOrigins, computeSpanMidX, computeSpanRangeX } from '../services/geometryService';
 import { SpanSteelPopover, NodeEndPopover } from './AceroCorrPopover';
 import { SpanBastonesPopover, NodeBastonesPopover } from './BastonesPopover';
 import { EstribosPopover } from './EstribosPopover';

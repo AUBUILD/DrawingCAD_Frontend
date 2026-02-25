@@ -112,12 +112,13 @@ export function useInitData({
           let finalIncoming = incoming;
           if (defaultPref === 'basico' || defaultPref === 'basico_bastones') {
             const applyNodes = defaultPref === 'basico_bastones' ? applyBasicBastonesPreferenceToNodes : applyBasicPreferenceToNodes;
-            const applySpans = defaultPref === 'basico_bastones' ? applyBasicBastonesPreferenceToSpans : applyBasicPreferenceToSpans;
             const updatedNodes = incoming.nodes && incoming.nodes.length > 0
               ? applyNodes([...incoming.nodes])
               : incoming.nodes;
             const updatedSpans = incoming.spans && incoming.spans.length > 0
-              ? applySpans([...incoming.spans])
+              ? (defaultPref === 'basico_bastones'
+                ? applyBasicBastonesPreferenceToSpans([...incoming.spans], updatedNodes ?? [])
+                : applyBasicPreferenceToSpans([...incoming.spans]))
               : incoming.spans;
             finalIncoming = { ...incoming, nodes: updatedNodes, spans: updatedSpans };
           }

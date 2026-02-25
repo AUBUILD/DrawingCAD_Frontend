@@ -11,6 +11,7 @@ import {
   applyBasicPreferenceToSpans,
   applyBasicBastonesPreferenceToNodes,
   applyBasicBastonesPreferenceToSpans,
+  resetAllSteel,
 } from '../services/steelService';
 import {
   safeSetLocalStorage,
@@ -114,13 +115,18 @@ export function usePreferences({
       const currentSpans = prev.spans ?? [];
       if (currentNodes.length === 0) return prev;
 
+      const updatedNodes = [...currentNodes];
+      const updatedSpans = [...currentSpans];
+
+      // Resetear TODO el acero antes de aplicar la nueva preferencia
+      resetAllSteel(updatedNodes, updatedSpans);
+
       // Aplicar configuración a nodos (ganchos, anclajes 75cm/60cm)
-      const updatedNodes = applyBasicPreferenceToNodes([...currentNodes]);
+      applyBasicPreferenceToNodes(updatedNodes);
 
       // Aplicar configuración a spans (acero corrido 2Ø5/8")
-      const updatedSpans = applyBasicPreferenceToSpans([...currentSpans]);
+      applyBasicPreferenceToSpans(updatedSpans);
 
-      // Retornar sin normalizar para no afectar la geometría
       return { ...prev, nodes: updatedNodes, spans: updatedSpans };
     });
   }, [dev, setDev, setAppCfg, setHookLegDraft, setSlabProjOffsetDraft, setSlabProjLayerDraft, setCascoLayer, setSteelLayer]);
@@ -152,9 +158,16 @@ export function usePreferences({
       const currentSpans = prev.spans ?? [];
       if (currentNodes.length === 0) return prev;
 
+      const updatedNodes = [...currentNodes];
+      const updatedSpans = [...currentSpans];
+
+      // Resetear TODO el acero antes de aplicar la nueva preferencia
+      resetAllSteel(updatedNodes, updatedSpans);
+
       // Pref 02: acero corrido + bastones + nodo bastones
-      const updatedNodes = applyBasicBastonesPreferenceToNodes([...currentNodes]);
-      const updatedSpans = applyBasicBastonesPreferenceToSpans([...currentSpans]);
+      // Primero nodos (define kinds), luego spans (necesita nodos para saber dónde ancla)
+      applyBasicBastonesPreferenceToNodes(updatedNodes);
+      applyBasicBastonesPreferenceToSpans(updatedSpans, updatedNodes);
 
       return { ...prev, nodes: updatedNodes, spans: updatedSpans };
     });

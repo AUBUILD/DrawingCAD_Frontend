@@ -55,9 +55,9 @@ export function formatOrdinalEs(n: number): string {
  */
 export function parseDefaultPref(raw: unknown): DefaultPreferenceId {
   const v = String(raw ?? '').trim().toLowerCase();
-  if (v === 'personalizado') return 'personalizado';
+  if (v === 'basico') return 'basico';
   if (v === 'basico_bastones') return 'basico_bastones';
-  return 'basico';
+  return 'personalizado';
 }
 
 /**

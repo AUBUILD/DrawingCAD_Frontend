@@ -350,6 +350,42 @@ export function applyBasicPreference(nodes: NodeIn[]): NodeSteelSetup[] {
   return configs;
 }
 
+// ============================================================================
+// RESET DE ACERO — limpia todas las propiedades de steel/baston en nodos y spans
+// ============================================================================
+
+const STEEL_NODE_KEYS = [
+  'steel_top_1_kind', 'steel_top_2_kind', 'steel_bottom_1_kind', 'steel_bottom_2_kind',
+  'steel_top_1_to_face', 'steel_top_2_to_face', 'steel_bottom_1_to_face', 'steel_bottom_2_to_face',
+  'steel_top_1_anchorage_length', 'steel_top_2_anchorage_length',
+  'steel_bottom_1_anchorage_length', 'steel_bottom_2_anchorage_length',
+  'steel_top_continuous', 'steel_top_hook', 'steel_top_development',
+  'steel_bottom_continuous', 'steel_bottom_hook', 'steel_bottom_development',
+  'baston_top_1_kind', 'baston_top_2_kind', 'baston_bottom_1_kind', 'baston_bottom_2_kind',
+  'baston_top_1_to_face', 'baston_top_2_to_face', 'baston_bottom_1_to_face', 'baston_bottom_2_to_face',
+  'baston_top_1_l1_kind', 'baston_top_1_l2_kind', 'baston_top_2_l1_kind', 'baston_top_2_l2_kind',
+  'baston_bottom_1_l1_kind', 'baston_bottom_1_l2_kind', 'baston_bottom_2_l1_kind', 'baston_bottom_2_l2_kind',
+  'baston_top_1_l1_to_face', 'baston_top_1_l2_to_face', 'baston_top_2_l1_to_face', 'baston_top_2_l2_to_face',
+  'baston_bottom_1_l1_to_face', 'baston_bottom_1_l2_to_face', 'baston_bottom_2_l1_to_face', 'baston_bottom_2_l2_to_face',
+] as const;
+
+/**
+ * Limpia TODAS las propiedades de acero/bastones de nodos y spans.
+ * Se llama al cambiar entre preferencias para arrancar desde cero.
+ */
+export function resetAllSteel(nodes: NodeIn[], spans: SpanIn[]): void {
+  for (const node of nodes) {
+    for (const key of STEEL_NODE_KEYS) {
+      delete (node as any)[key];
+    }
+  }
+  for (const span of spans) {
+    delete (span as any).steel_top;
+    delete (span as any).steel_bottom;
+    delete (span as any).bastones;
+  }
+}
+
 /**
  * Aplica la configuración de Preferencia 01: Básico a los spans,
  * configurando el acero corrido estándar (2Ø5/8" superior e inferior)
@@ -448,26 +484,69 @@ function defaultBastonCfg(): {
  * Superior: Z1 y Z3 activados (L1+L2, 2Ø5/8")
  * Inferior: Z2 activado (L1+L2, 2Ø5/8")
  */
-export function applyBasicBastonesPreferenceToSpans(spans: SpanIn[]): SpanIn[] {
+export function applyBasicBastonesPreferenceToSpans(spans: SpanIn[], nodes: NodeIn[]): SpanIn[] {
   // Primero aplicar Pref 01 (acero corrido)
   applyBasicPreferenceToSpans(spans);
 
+  /**
+   * Verifica si el acero corrido realmente ancla en un nodo/lado/end.
+   * Requiere que:
+   * 1. El kind no sea 'continuous'
+   * 2. El ancho de columna >= longitud mínima de anclaje según REBAR_TABLE_CM
+   */
+  function steelTrulyAnchors(
+    node: any, side: 'top' | 'bottom', end: 1 | 2, dia: string,
+  ): boolean {
+    const kind = (node[`steel_${side}_${end}_kind`] ?? 'continuous') as string;
+    if (kind === 'continuous') return false;
+
+    // Ancho de columna para este lado
+    const colWidth = side === 'top'
+      ? Math.abs((node.b2 ?? 0) - (node.b1 ?? 0))
+      : Math.abs((node.a2 ?? 0) - (node.a1 ?? 0));
+
+    // Longitud mínima de anclaje desde la tabla
+    const minLen = lengthFromTableMeters(
+      dia, kind === 'hook' ? 'hook' : 'anchorage', side,
+    );
+
+    return colWidth >= minLen;
+  }
+
   for (let i = 0; i < spans.length; i++) {
     const span = spans[i] as any;
+    const leftNode = (nodes[i] ?? {}) as any;
+    const rightNode = (nodes[i + 1] ?? {}) as any;
+
+    // Diámetros del acero corrido de este tramo
+    const topDia = span.steel_top?.diameter ?? '5/8';
+    const botDia = span.steel_bottom?.diameter ?? '5/8';
+
+    // Verificar si el acero realmente ancla (cumple dimensión mínima)
+    const topLeftAnchors = steelTrulyAnchors(leftNode, 'top', 2, topDia);
+    const topRightAnchors = steelTrulyAnchors(rightNode, 'top', 1, topDia);
+    const botLeftAnchors = steelTrulyAnchors(leftNode, 'bottom', 2, botDia);
+    const botRightAnchors = steelTrulyAnchors(rightNode, 'bottom', 1, botDia);
+
+    const hasTopBastones = topLeftAnchors || topRightAnchors;
+    const hasBotBastones = botLeftAnchors || botRightAnchors;
+
+    // Si no hay anclaje válido en ningún lado, no agregar bastones
+    if (!hasTopBastones && !hasBotBastones) continue;
 
     // Inicializar bastones si no existen
     if (!span.bastones) span.bastones = {};
     if (!span.bastones.top) span.bastones.top = {};
     if (!span.bastones.bottom) span.bastones.bottom = {};
 
-    // Superior: Z1 y Z3 activados
-    span.bastones.top.z1 = { ...defaultBastonCfg() };
+    // Superior: Z1 solo si ancla en nodo izquierdo, Z3 solo si ancla en nodo derecho
+    span.bastones.top.z1 = topLeftAnchors ? { ...defaultBastonCfg() } : (span.bastones.top.z1 ?? {});
     span.bastones.top.z2 = span.bastones.top.z2 ?? {};
-    span.bastones.top.z3 = { ...defaultBastonCfg() };
+    span.bastones.top.z3 = topRightAnchors ? { ...defaultBastonCfg() } : (span.bastones.top.z3 ?? {});
 
-    // Inferior: Z2 activado
+    // Inferior: Z2 solo si ancla en algún lado
     span.bastones.bottom.z1 = span.bastones.bottom.z1 ?? {};
-    span.bastones.bottom.z2 = { ...defaultBastonCfg() };
+    span.bastones.bottom.z2 = hasBotBastones ? { ...defaultBastonCfg() } : (span.bastones.bottom.z2 ?? {});
     span.bastones.bottom.z3 = span.bastones.bottom.z3 ?? {};
   }
 
@@ -490,9 +569,13 @@ export function applyBasicBastonesPreferenceToNodes(nodes: NodeIn[]): NodeIn[] {
     for (const side of ['top', 'bottom'] as const) {
       for (const end of [1, 2] as const) {
         const steelKind = node[`steel_${side}_${end}_kind`] ?? 'continuous';
+        const steelToFace = Boolean(node[`steel_${side}_${end}_to_face`] ?? false);
         // Aplicar el mismo kind a L1 y L2 de los bastones
         node[`baston_${side}_${end}_l1_kind`] = steelKind;
         node[`baston_${side}_${end}_l2_kind`] = steelKind;
+        // Aplicar el mismo to_face a L1 y L2 de los bastones (misma lógica que acero corrido)
+        node[`baston_${side}_${end}_l1_to_face`] = steelToFace;
+        node[`baston_${side}_${end}_l2_to_face`] = steelToFace;
       }
     }
   }
