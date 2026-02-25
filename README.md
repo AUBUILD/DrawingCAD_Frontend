@@ -1,89 +1,166 @@
-# BeamDraw Live (FastAPI + React)
+# BeamDraw Frontend (React + TypeScript)
 
-Preview en tiempo real del casco (desarrollos) + exportación DXF.
+Interfaz para edicion de vigas de concreto armado con preview 2D/3D en tiempo real y exportacion DXF.
 
-## Backend (FastAPI)
+## Stack
 
-En una terminal:
+- **React 18** + **TypeScript 5.3**
+- **Vite 5** (build + dev server)
+- **Three.js 0.182** (visualizacion 3D)
+- **Context API + useReducer** (estado global)
 
-- `cd backend`
-- `python -m venv .venv`
-- `./.venv/Scripts/python -m pip install -r requirements.txt`
-- `./.venv/Scripts/python -m uvicorn app:app --reload --port 8000`
+## Inicio rapido
 
-Health: http://localhost:8000/api/health
+```bash
+cd DrawingCAD_Frontend
+npm install
+npm run dev
+```
 
-### Persistencia (Postgres) (opcional)
+Abrir: http://localhost:5178
 
-El frontend intenta guardar/cargar el estado desde el backend usando:
+El dev server proxyea `/api/*` hacia `http://localhost:8000` (backend).
 
-- `GET /api/projects/current`
-- `PUT /api/projects/current`
+## Scripts
 
-Para habilitarlo, configura `DATABASE_URL` al arrancar el backend (ejemplo):
+| Comando | Descripcion |
+|---------|-------------|
+| `npm run dev` | Servidor de desarrollo (puerto 5178) |
+| `npm run build` | Build de produccion (output: `dist/`) |
+| `npm run preview` | Preview del build de produccion |
 
-- PowerShell: `setx DATABASE_URL "postgresql://user:pass@localhost:5432/beamdrawing"`
+## Variables de entorno
 
-La tabla `beamdraw_state` se crea automáticamente.
+| Variable | Descripcion | Default |
+|----------|-------------|---------|
+| `VITE_API_URL` | URL base del backend | _(proxy a localhost:8000)_ |
 
-## Frontend (React + Vite)
+En produccion, definir `VITE_API_URL` apuntando al backend (ej: `https://beamdraw-backend.onrender.com`).
 
-En otra terminal:
+## Arquitectura
 
-- `cd frontend`
-- `npm install`
-- `npm run dev`
+### Estructura de archivos
 
-Abrir: http://localhost:5173
+```
+src/
+  main.tsx                  Punto de entrada con ErrorBoundary
+  App.tsx                   Componente principal (~4700 lineas)
+  api.ts                    Cliente REST para el backend
+  types.ts                  Interfaces TypeScript (SpanIn, NodeIn, DevelopmentIn, etc.)
+  steelLayout.ts            Calculos de layout de acero E.060
+  styles.css                Estilos globales
 
-Nota: el frontend llama a `/api/...` (URL relativa). En desarrollo, Vite proxyea `/api` hacia `http://localhost:8000`.
+  components/
+    ConfigTab/
+      ConfigTab.tsx         Configuracion global (template, layers, texto acero)
+    ConcreteTab/
+      ConcreteTab.tsx       Editor de geometria (tramos y nodos)
+      EditableCell.tsx      Input numerico editable con estado local
+    SteelTab/
+      SteelTab.tsx          Editor de acero (continuo, estribos, bastones)
+    PreviewPanel/
+      PreviewPanel.tsx      Panel de visualizacion 2D/3D
+    BastonesTable.tsx       Tabla de bastones por tramo
+    EstribosTable.tsx       Tabla de estribos por tramo
+    NodosTable.tsx          Tabla de configuracion de nodos
 
-## Despliegue (producción)
+  context/
+    AppContext.tsx           Provider principal (AppStateContext + AppDispatchContext)
+    AppContext.types.ts      Tipos del estado y acciones (AppState, AppAction, Tab)
+    AppContext.reducer.ts    Reducer con 30+ tipos de accion
 
-Hay dos formas típicas:
+  hooks/
+    useDebounce.ts          Debounce con prevencion de race conditions
+    useAutoSave.ts          Auto-guardado con debounce (600ms)
+    useSelection.ts         Estado de seleccion (span/node)
+    useCanvasRender.ts      Renderizado canvas con RAF + ResizeObserver
+    useBastonLen.ts         Edicion draft de longitudes de bastones
+    useStirrupsAbcr.ts      Edicion draft de patrones ABCR
 
-### Opción A: Reverse proxy (recomendado)
+  services/
+    geometryService.ts      Calculos geometricos (mToUnits, nodeOrigins, spanRange)
+    steelService.ts         Calculos de acero (anchorage, hook lengths, rebar table)
+    stirrupsService.ts      Parsing de estribos (ABCR, N@S, rto@S)
+    developmentService.ts   Normalizacion y clonacion de DevelopmentIn
+    canvasService.ts        Renderizado 2D (polylines, cortes, overlays)
+    threeService.ts         Utilidades Three.js (camera, materials, dispose)
+    appUtils.ts             Utilidades generales (downloadBlob)
 
-- Backend:
-  - Ejecuta FastAPI en el servidor (ejemplo):
-    - `./.venv/Scripts/python -m uvicorn app:app --host 0.0.0.0 --port 8000`
-- Frontend:
-  - `cd frontend`
-  - `npm ci`
-  - `npm run build` (genera `frontend/dist`)
-  - Sirve `frontend/dist` con Nginx/IIS/Apache.
-- Proxy:
-  - Configura tu servidor web para servir el frontend y reenviar `/api` al backend (puerto 8000).
-  - Así el navegador no necesita CORS y la build del frontend no depende de `localhost`.
+  utils/
+    numberUtils.ts          clampNumber, clampInt, fmt2, snap05m
+    stringUtils.ts          formatBeamNo, levelPrefix, formatOrdinalEs
+    storageUtils.ts         Acceso seguro a localStorage
+    stirrupsUtils.ts        Parsing/formato ABCR, tablas default por peralte
+    jsonUtils.ts            safeParseJson, toJson
+```
 
-### Opción B: Frontend y backend en dominios distintos
+### Flujo de datos
 
-- Define la variable de entorno del frontend:
-  - `VITE_API_URL=https://tu-backend.com`
-  - (compatibilidad) `VITE_API_BASE` también funciona.
-- Reconstruye el frontend (`npm run build`).
-- Asegúrate de habilitar CORS en el backend para el dominio del frontend.
+```
+Usuario edita UI (ConfigTab / ConcreteTab / SteelTab)
+  -> dispatch(action) via useAppActions()
+  -> appReducer actualiza AppState inmutablemente
+  -> Componentes re-renderizan
+  -> useAutoSave persiste al backend (600ms debounce)
+  -> PreviewPanel renderiza con datos actualizados
+```
 
-### Render (recomendado)
+### Tabs principales
 
-- Backend: despliega el repo del backend (incluye `render.yaml`).
-- Frontend: despliega este repo como **Static Site** (o usa el `render.yaml` incluido).
-- En el frontend configura `VITE_API_URL` en Render (Build-time env var):
-  - Ejemplo: `https://beamdraw-backend.onrender.com`
-- En el backend configura `BEAMDRAW_ALLOWED_ORIGINS` con la URL pública del frontend:
-  - Ejemplo: `https://beamdraw-frontend.onrender.com`
+| Tab | Componente | Descripcion |
+|-----|-----------|-------------|
+| Config | `ConfigTab` | Template DXF, layers, texto de acero, proyeccion de losa |
+| Concreto | `ConcreteTab` | Geometria: tramos (L, h, b) y nodos (b1, b2, a2, proyecciones) |
+| Acero | `SteelTab` | Acero continuo, estribos, bastones, layout E.060 |
+| Preview | `PreviewPanel` | Vista 2D overview + detalle zoom + 3D con OrbitControls |
 
-## Formato de entrada
+### Estado global (AppState)
 
-El editor usa JSON con esta forma:
+```typescript
+dev: DevelopmentIn          // Datos del desarrollo activo
+appCfg: AppConfig           // Configuracion de la app
+preview: PreviewResponse    // Respuesta del backend (polylines)
+backendCfg: BackendAppConfig // Config del backend (hook_leg, text styles)
+tab: Tab                    // Tab activo
+busy: boolean               // Estado de carga
+saveStatus: SaveStatus      // 'saved' | 'saving' | 'error' | null
+selection: Selection        // Seleccion actual (span/node/none)
+savedCuts: SavedCut[]       // Cortes de seccion guardados
+previewView: '2d' | '3d'   // Vista actual del preview
+```
 
-- `developments`: lista de desarrollos
-  - `spans`: lista de tramos `{L, h}` (metros)
-    - opcional: `b` (UI-only; se persiste pero no afecta la geometría)
-  - `nodes`: lista de nodos `{a1, a2, b1, b2, project_a, project_b}` (metros)
-  - `d`, `unit_scale`, `x0`, `y0`
+## API del backend (endpoints consumidos)
 
-Notas:
-- `unit_scale=100` dibuja en cm.
-- `y0` sirve para separar desarrollos (por ejemplo -3.0, -6.0).
-- Nodos tipo viga: `project_a=false` y `project_b=false`.
+| Metodo | Ruta | Funcion en api.ts |
+|--------|------|-------------------|
+| POST | `/api/preview` | `fetchPreview()` |
+| POST | `/api/export-dxf` | `exportDxf()` |
+| POST | `/api/import-dxf` | `importDxf()` |
+| GET | `/api/config` | `fetchConfig()` |
+| PUT | `/api/config` | `updateConfig()` |
+| POST | `/api/template-dxf` | `uploadTemplateDxf()` |
+| GET | `/api/template-dxf` | `getTemplateDxf()` |
+| DELETE | `/api/template-dxf` | `clearTemplateDxf()` |
+| GET | `/api/projects/current` | `fetchState()` |
+| PUT | `/api/projects/current` | `saveState()` |
+
+## Despliegue
+
+### Build
+
+```bash
+VITE_API_URL=https://tu-backend.com npm run build
+```
+
+### Render.com
+
+El repo incluye `render.yaml` para despliegue como Static Site:
+
+- Build command: `npm ci && npm run build`
+- Publish directory: `dist`
+- Env var: `VITE_API_URL` con la URL del backend
+
+### Reverse proxy (alternativa)
+
+Servir `dist/` con Nginx/Apache y reenviar `/api/*` al backend en puerto 8000.
+No requiere CORS ni `VITE_API_URL`.

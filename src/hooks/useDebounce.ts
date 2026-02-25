@@ -35,7 +35,6 @@ export function useDebounce<T>(
 
         // Verificar si este efecto sigue siendo el más reciente
         if (seqRef.current !== seq) {
-          console.log('[useDebounce] Efecto cancelado (sequence mismatch)');
           return;
         }
       } catch (e) {

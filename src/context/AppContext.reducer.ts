@@ -19,7 +19,16 @@ export function appReducer(state: AppState, action: AppAction): AppState {
       if (spanIdx < 0 || spanIdx >= spans.length) return state;
       const newSpans = [...spans];
       newSpans[spanIdx] = { ...newSpans[spanIdx], ...patch };
-      return { ...state, dev: { ...state.dev, spans: newSpans } };
+
+      // Si cambió el peralte (h), actualizar crossbeams del mismo tramo
+      let crossbeams = (state.dev as any).crossbeams;
+      if ('h' in patch && Array.isArray(crossbeams)) {
+        crossbeams = crossbeams.map((cb: any) =>
+          cb.span_index === spanIdx ? { ...cb, h: patch.h } : cb
+        );
+      }
+
+      return { ...state, dev: { ...state.dev, spans: newSpans, crossbeams } };
     }
 
     case 'UPDATE_NODE': {

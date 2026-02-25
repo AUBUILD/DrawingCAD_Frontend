@@ -27,7 +27,7 @@ export type ThreeProjection = 'perspective' | 'orthographic';
 /**
  * Preferencia por defecto
  */
-export type DefaultPreferenceId = 'basico' | 'personalizado';
+export type DefaultPreferenceId = 'basico' | 'basico_bastones' | 'personalizado';
 
 /**
  * Estado de guardado
