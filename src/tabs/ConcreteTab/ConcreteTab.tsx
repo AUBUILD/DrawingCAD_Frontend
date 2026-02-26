@@ -27,6 +27,7 @@ export interface ConcreteTabProps {
   // Actions
   clearDevelopment: () => void;
   onImportDxfFile: (file: File) => void;
+  onImportDxfBatchFile: (file: File) => void;
   onSave: () => void;
   addSpan: () => void;
   removeSpan: (index: number) => void;
@@ -71,6 +72,7 @@ const ConcreteTabInner: React.FC<ConcreteTabProps> = ({
   setShowNT,
   clearDevelopment,
   onImportDxfFile,
+  onImportDxfBatchFile,
   onSave,
   addSpan,
   removeSpan,
@@ -85,6 +87,7 @@ const ConcreteTabInner: React.FC<ConcreteTabProps> = ({
   fmt2,
 }) => {
   const dxfInputRef = useRef<HTMLInputElement | null>(null);
+  const batchDxfInputRef = useRef<HTMLInputElement | null>(null);
 
   return (
     <div className="form">
@@ -99,6 +102,15 @@ const ConcreteTabInner: React.FC<ConcreteTabProps> = ({
             title="Importar DXF (una viga)"
           >
             Importa DXF
+          </button>
+          <button
+            className="btnSmall"
+            type="button"
+            onClick={() => batchDxfInputRef.current?.click()}
+            disabled={busy}
+            title="Importar DXF con multiples vigas"
+          >
+            Batch DXF
           </button>
           <button className="btnSmall" type="button" onClick={clearDevelopment} disabled={busy} title="Reiniciar el desarrollo">
             Limpiar
@@ -126,6 +138,17 @@ const ConcreteTabInner: React.FC<ConcreteTabProps> = ({
               const f = e.target.files?.[0];
               e.target.value = '';
               if (f) onImportDxfFile(f);
+            }}
+          />
+          <input
+            ref={batchDxfInputRef}
+            type="file"
+            accept=".dxf"
+            style={{ display: 'none' }}
+            onChange={(e) => {
+              const f = e.target.files?.[0];
+              e.target.value = '';
+              if (f) onImportDxfBatchFile(f);
             }}
           />
         </div>

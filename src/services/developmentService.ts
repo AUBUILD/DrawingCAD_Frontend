@@ -418,8 +418,8 @@ export function normalizeDev(input: DevelopmentIn, appCfg: AppConfig): Developme
 
     let stirrups = normalizeStirrupsDistribution((s as any).stirrups);
     const ct = String((stirrups as any)?.case_type ?? 'simetrica').trim().toLowerCase();
-    const modeRaw = String((stirrups as any)?.design_mode ?? 'gravedad').trim().toLowerCase();
-    const mode: 'sismico' | 'gravedad' = modeRaw === 'sismico' ? 'sismico' : 'gravedad';
+    const modeRaw = String((stirrups as any)?.design_mode ?? 'sismico').trim().toLowerCase();
+    const mode: 'sismico' | 'gravedad' = modeRaw === 'gravedad' ? 'gravedad' : 'sismico';
 
     const defaultSpec = formatStirrupsABCR(pickDefaultABCRForH(h, mode));
     const applyDefaults = () => {
@@ -652,9 +652,8 @@ export function toBackendPayload(dev: DevelopmentIn): PreviewRequest {
   } as PreviewRequest;
 }
 
-export function toPreviewPayload(dev: DevelopmentIn): PreviewRequest {
+export function toPreviewPayloadSingle(dev: DevelopmentIn): DevelopmentIn {
   // Preview backend needs concrete geometry + essential steel info for correct visualization
-  // Include only necessary steel fields to avoid backend processing issues
   const spans = (dev.spans ?? []).map((s) => ({
     L: s.L,
     h: s.h,
@@ -673,7 +672,6 @@ export function toPreviewPayload(dev: DevelopmentIn): PreviewRequest {
     project_a: (n as any).project_a,
     project_b: (n as any).project_b,
     support_type: (n as any).support_type,
-    // Steel configuration (new system) - only essential fields
     steel_top_1_kind: (n as any).steel_top_1_kind,
     steel_top_2_kind: (n as any).steel_top_2_kind,
     steel_bottom_1_kind: (n as any).steel_bottom_1_kind,
@@ -686,7 +684,6 @@ export function toPreviewPayload(dev: DevelopmentIn): PreviewRequest {
     steel_top_2_anchorage_length: (n as any).steel_top_2_anchorage_length,
     steel_bottom_1_anchorage_length: (n as any).steel_bottom_1_anchorage_length,
     steel_bottom_2_anchorage_length: (n as any).steel_bottom_2_anchorage_length,
-    // Steel configuration (legacy system for backwards compatibility)
     steel_top_continuous: (n as any).steel_top_continuous,
     steel_top_hook: (n as any).steel_top_hook,
     steel_top_development: (n as any).steel_top_development,
@@ -694,7 +691,7 @@ export function toPreviewPayload(dev: DevelopmentIn): PreviewRequest {
     steel_bottom_hook: (n as any).steel_bottom_hook,
     steel_bottom_development: (n as any).steel_bottom_development,
   }));
-  const minimal: DevelopmentIn = {
+  return {
     name: dev.name,
     level_type: (dev as any).level_type,
     beam_no: (dev as any).beam_no,
@@ -708,5 +705,16 @@ export function toPreviewPayload(dev: DevelopmentIn): PreviewRequest {
     nodes,
     crossbeams: (dev as any).crossbeams || [],
   };
-  return { developments: [minimal] } as PreviewRequest;
+}
+
+export function toPreviewPayload(dev: DevelopmentIn): PreviewRequest {
+  return { developments: [toPreviewPayloadSingle(dev)] } as PreviewRequest;
+}
+
+export function toBackendPayloadMulti(devs: DevelopmentIn[]): PreviewRequest {
+  return { developments: devs } as PreviewRequest;
+}
+
+export function toPreviewPayloadMulti(devs: DevelopmentIn[]): PreviewRequest {
+  return { developments: devs.map(toPreviewPayloadSingle) } as PreviewRequest;
 }

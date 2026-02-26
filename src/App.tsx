@@ -1,10 +1,11 @@
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { fetchPreview } from './api';
 import type { BackendAppConfig, DevelopmentIn, PreviewResponse } from './types';
 import { getSteelLayoutSettings } from './steelLayout';
 import {
   mToUnits, spanIndexAtX, normalizeBastonCfg, normalizeDev,
-  defaultDevelopment, toBackendPayload, toPreviewPayload, DEFAULT_APP_CFG,
+  defaultDevelopment, toBackendPayload,
+  toBackendPayloadMulti, toPreviewPayload, DEFAULT_APP_CFG,
   type AppConfig, nodeSteelKind, nodeToFaceEnabled,
   nodeBastonLineKind, nodeBastonLineToFaceEnabled, buildNodeSlots,
   type Bounds, type Selection, type QuantityDisplayState,
@@ -70,12 +71,31 @@ export default function App() {
   const detailViewportRef = useRef<Bounds | null>(detailViewport);
   const steelViewActive = tab === 'acero' || steelViewPinned;
   const [steelOverlayLayer, setSteelOverlayLayer] = useState<SteelOverlayLayer | null>(null);
+  const [exportMode, setExportMode] = useState<'single' | 'all'>('single');
 
   useEffect(() => { if (tab === 'acero') setSteelViewPinned(true); }, [tab]);
 
   // ── Domain state ──────────────────────────────────────────
   const [appCfg, setAppCfg] = useState<AppConfig>(DEFAULT_APP_CFG);
-  const [dev, setDev] = useState<DevelopmentIn>(() => defaultDevelopment(DEFAULT_APP_CFG));
+  const [developments, setDevelopments] = useState<DevelopmentIn[]>(() => [defaultDevelopment(DEFAULT_APP_CFG)]);
+  const [activeDevIdx, setActiveDevIdx] = useState(0);
+
+  // Derived dev + adapter setDev for existing hooks (they operate on the active development)
+  const dev = developments[activeDevIdx] ?? developments[0] ?? defaultDevelopment(DEFAULT_APP_CFG);
+  const setDev: React.Dispatch<React.SetStateAction<DevelopmentIn>> = useCallback(
+    (action) => {
+      setDevelopments((prev) => {
+        const idx = Math.min(activeDevIdx, prev.length - 1);
+        const current = prev[idx];
+        const next = typeof action === 'function' ? action(current) : action;
+        const copy = [...prev];
+        copy[idx] = next;
+        return copy;
+      });
+    },
+    [activeDevIdx],
+  );
+
   const [jsonText, setJsonText] = useState(() => toJson(toBackendPayload(defaultDevelopment(DEFAULT_APP_CFG))));
   const [preview, setPreview] = useState<PreviewResponse | null>(null);
   const [busy, setBusy] = useState(false);
@@ -154,9 +174,9 @@ export default function App() {
   }, [(dev as any).steel_layout_settings]);
 
   const payloadInfo = useMemo(() => {
-    const payload = toBackendPayload(dev);
+    const payload = toBackendPayloadMulti(developments);
     return { payload, error: null as string | null, warning: null as string | null };
-  }, [dev]);
+  }, [developments]);
   const payload = payloadInfo.payload;
 
   const previewPayloadInfo = useMemo(() => {
@@ -166,9 +186,9 @@ export default function App() {
 
   const {
     handleSaveManual, clearDevelopment, onExportDxf,
-    onUploadTemplate, onClearTemplate, onImportDxfFile, applyJsonToForm,
+    onUploadTemplate, onClearTemplate, onImportDxfFile, onImportDxfBatchFile, applyJsonToForm,
   } = useApiActions({
-    dev, setDev, appCfg, setAppCfg,
+    dev, developments, exportMode, setExportMode, setDev, setDevelopments, setActiveDevIdx, appCfg, setAppCfg,
     payload, savedCuts, cascoLayer, steelLayer, drawSteel, defaultPref,
     quantityDisplay, sectionXU, recubrimientoM: appCfg.recubrimiento,
     setBusy, setError, setWarning,
@@ -207,7 +227,7 @@ export default function App() {
   useEffect(() => { if (tabRef.current === 'json') return; setJsonText(toJson(payload)); }, [payload]);
 
   useInitData({
-    dev, setDev, appCfg, setAppCfg,
+    dev, setDev, setDevelopments, setActiveDevIdx, appCfg, setAppCfg,
     defaultPref, applyBasicoPreference, applyBasicoBastonesPreference, applyPersonalizadoPreference,
     setJsonText, payload, setSaveStatus, setTemplateName, setTemplateLayers,
     cascoLayer, steelLayer, drawSteel,
@@ -288,6 +308,33 @@ export default function App() {
     return () => window.removeEventListener('keydown', onKeyDown);
   }, [detailViewport, selection.kind]);
 
+  // ── Development selector handlers ────────────────────────
+  const onSelectDev = useCallback((idx: number) => {
+    if (idx >= 0 && idx < developments.length) {
+      setActiveDevIdx(idx);
+      setSelection({ kind: 'none' });
+      setDetailViewport(null);
+      setSelectedBastonDetailTags(null);
+      setSelectedBastonDetailSpans(null);
+    }
+  }, [developments.length]);
+
+  const onAddDev = useCallback(() => {
+    const newDev = defaultDevelopment(appCfg);
+    setDevelopments((prev) => [...prev, newDev]);
+    setActiveDevIdx(developments.length);
+    setSelection({ kind: 'none' });
+    setDetailViewport(null);
+  }, [appCfg, developments.length]);
+
+  const onRemoveDev = useCallback((idx: number) => {
+    if (developments.length <= 1) return;
+    setDevelopments((prev) => prev.filter((_, i) => i !== idx));
+    setActiveDevIdx((prev) => Math.min(prev, developments.length - 2));
+    setSelection({ kind: 'none' });
+    setDetailViewport(null);
+  }, [developments.length]);
+
   // ── Render ────────────────────────────────────────────────
   if (!dev || !appCfg) {
     return (
@@ -314,10 +361,17 @@ export default function App() {
       header={
         <HeaderBar
           devName={dev.name}
+          developments={developments}
+          activeDevIdx={activeDevIdx}
+          onSelectDev={onSelectDev}
+          onAddDev={onAddDev}
+          onRemoveDev={onRemoveDev}
           saveStatus={saveStatus}
           steelOverlayLayer={steelOverlayLayer}
           setSteelOverlayLayer={setSteelOverlayLayer}
           onExportDxf={onExportDxf}
+          exportMode={exportMode}
+          setExportMode={setExportMode}
           busy={busy}
         />
       }
@@ -345,7 +399,7 @@ export default function App() {
           concreteTabProps={{
             dev, selection, spansCols, nodesCols, busy, concretoLocked,
             showNT, setConcretoLocked, setShowNT,
-            clearDevelopment, onImportDxfFile, onSave: handleSaveManual,
+            clearDevelopment, onImportDxfFile, onImportDxfBatchFile, onSave: handleSaveManual,
             addSpan, removeSpan, updateDevPatch, updateSpan, updateNode,
             applySelection, onGridKeyDown, formatOrdinalEs,
             clampInt, clampNumber, fmt2,

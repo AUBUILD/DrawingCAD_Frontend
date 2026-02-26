@@ -40,7 +40,7 @@ export const EstribosPopover: React.FC<Props> = ({
   const h = span.h ?? 0.5;
 
   const caseType = dist.case_type ?? 'simetrica';
-  const designMode = (dist.design_mode ?? 'gravedad') as 'sismico' | 'gravedad';
+  const designMode = (dist.design_mode ?? 'sismico') as 'sismico' | 'gravedad';
   const diameter = dist.diameter ?? '3/8';
   const singleEnd = dist.single_end ?? 'left';
 

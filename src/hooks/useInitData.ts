@@ -24,6 +24,8 @@ import {
 interface UseInitDataParams {
   dev: DevelopmentIn;
   setDev: React.Dispatch<React.SetStateAction<DevelopmentIn>>;
+  setDevelopments: React.Dispatch<React.SetStateAction<DevelopmentIn[]>>;
+  setActiveDevIdx: React.Dispatch<React.SetStateAction<number>>;
   appCfg: AppConfig;
   setAppCfg: React.Dispatch<React.SetStateAction<AppConfig>>;
   defaultPref: DefaultPreferenceId;
@@ -53,6 +55,8 @@ interface UseInitDataParams {
 export function useInitData({
   dev,
   setDev,
+  setDevelopments,
+  setActiveDevIdx,
   appCfg,
   setAppCfg,
   defaultPref,
@@ -88,6 +92,7 @@ export function useInitData({
         if (cancelled) return;
         if (stored?.developments?.length) {
           loaded = true;
+          // Extraer appCfg del primer desarrollo
           const incoming = stored.developments[0];
           const nextCfg: AppConfig = {
             d: clampNumber(incoming.d ?? DEFAULT_APP_CFG.d, DEFAULT_APP_CFG.d),
@@ -108,22 +113,25 @@ export function useInitData({
           };
           setAppCfg(nextCfg);
 
-          // Aplicar preferencia ANTES de normalizar
-          let finalIncoming = incoming;
-          if (defaultPref === 'basico' || defaultPref === 'basico_bastones') {
-            const applyNodes = defaultPref === 'basico_bastones' ? applyBasicBastonesPreferenceToNodes : applyBasicPreferenceToNodes;
-            const updatedNodes = incoming.nodes && incoming.nodes.length > 0
-              ? applyNodes([...incoming.nodes])
-              : incoming.nodes;
-            const updatedSpans = incoming.spans && incoming.spans.length > 0
-              ? (defaultPref === 'basico_bastones'
-                ? applyBasicBastonesPreferenceToSpans([...incoming.spans], updatedNodes ?? [])
-                : applyBasicPreferenceToSpans([...incoming.spans]))
-              : incoming.spans;
-            finalIncoming = { ...incoming, nodes: updatedNodes, spans: updatedSpans };
-          }
-
-          setDev(normalizeDev(finalIncoming, nextCfg));
+          // Normalizar TODOS los desarrollos
+          const normalizedDevs = stored.developments.map((d: DevelopmentIn) => {
+            let finalD = d;
+            if (defaultPref === 'basico' || defaultPref === 'basico_bastones') {
+              const applyNodes = defaultPref === 'basico_bastones' ? applyBasicBastonesPreferenceToNodes : applyBasicPreferenceToNodes;
+              const updatedNodes = d.nodes && d.nodes.length > 0
+                ? applyNodes([...d.nodes])
+                : d.nodes;
+              const updatedSpans = d.spans && d.spans.length > 0
+                ? (defaultPref === 'basico_bastones'
+                  ? applyBasicBastonesPreferenceToSpans([...d.spans], updatedNodes ?? [])
+                  : applyBasicPreferenceToSpans([...d.spans]))
+                : d.spans;
+              finalD = { ...d, nodes: updatedNodes, spans: updatedSpans };
+            }
+            return normalizeDev(finalD, nextCfg);
+          });
+          setDevelopments(normalizedDevs);
+          setActiveDevIdx(0);
           setJsonText(toJson(stored));
         }
       } catch {

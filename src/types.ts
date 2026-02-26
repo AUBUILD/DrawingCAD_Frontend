@@ -273,6 +273,11 @@ export type ImportDxfResponse = {
   warnings: string[];
 };
 
+export type ImportDxfBatchResponse = {
+  developments: DevelopmentIn[];
+  warnings: string[];
+};
+
 export type TemplateDxfInfo = {
   filename: string;
   layers: string[];
