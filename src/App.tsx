@@ -47,7 +47,7 @@ export default function App() {
   const [showStirrups, setShowStirrups] = useState(true);
   const [quantityDisplay, setQuantityDisplay] = useState<QuantityDisplayState>({
     enabled: true,
-    mode: 'zones',
+    mode: 'section',
     show_p_min: false,
     show_p_max: false,
     show_p_instalada: false,
