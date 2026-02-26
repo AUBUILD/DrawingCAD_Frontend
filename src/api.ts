@@ -1,4 +1,4 @@
-import type { BackendAppConfig, ExportDxfRequest, ImportDxfResponse, PreviewRequest, PreviewResponse, TemplateDxfInfo } from './types';
+import type { BackendAppConfig, ExportDxfRequest, ImportDxfBatchResponse, ImportDxfResponse, PreviewRequest, PreviewResponse, TemplateDxfInfo } from './types';
 
 function normalizeBaseUrl(raw: unknown): string {
   const v = typeof raw === 'string' ? raw.trim() : '';
@@ -98,6 +98,23 @@ export async function importDxf(file: File): Promise<ImportDxfResponse> {
   fd.append('file', file);
 
   const res = await fetch(`${BASE}/api/import-dxf`, {
+    method: 'POST',
+    body: fd,
+  });
+
+  if (!res.ok) {
+    const text = await res.text();
+    throw new Error(text || `HTTP ${res.status}`);
+  }
+
+  return res.json();
+}
+
+export async function importDxfBatch(file: File): Promise<ImportDxfBatchResponse> {
+  const fd = new FormData();
+  fd.append('file', file);
+
+  const res = await fetch(`${BASE}/api/import-dxf-batch`, {
     method: 'POST',
     body: fd,
   });

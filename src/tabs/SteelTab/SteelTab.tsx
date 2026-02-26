@@ -813,8 +813,8 @@ const SteelTabInner: React.FC<SteelTabProps> = ({
           const caseTypeOf = (st: any) => String(st.case_type ?? 'simetrica');
           const singleEndOf = (st: any) => String(st.single_end ?? '');
           const modeOf = (st: any) => {
-            const v = String(st.design_mode ?? 'gravedad').trim().toLowerCase();
-            return v === 'sismico' ? 'sismico' : 'gravedad';
+            const v = String(st.design_mode ?? 'sismico').trim().toLowerCase();
+            return v === 'gravedad' ? 'gravedad' : 'sismico';
           };
 
           const fmt = (v: number | undefined | null) => (typeof v === 'number' && Number.isFinite(v) ? v.toFixed(2) : '');

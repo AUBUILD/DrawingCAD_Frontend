@@ -24,8 +24,8 @@ const EstribosTable: React.FC<EstribosTableProps> = ({
   const caseTypeOf = (st: Partial<StirrupsDistributionIn>) => String(st.case_type ?? 'simetrica');
   const singleEndOf = (st: Partial<StirrupsDistributionIn>) => String(st.single_end ?? '');
   const modeOf = (st: Partial<StirrupsDistributionIn>) => {
-    const v = String(st.design_mode ?? 'gravedad').trim().toLowerCase();
-    return v === 'sismico' ? 'sismico' : 'gravedad';
+    const v = String(st.design_mode ?? 'sismico').trim().toLowerCase();
+    return v === 'gravedad' ? 'gravedad' : 'sismico';
   };
   const fmt = (v: number | undefined | null) => (typeof v === 'number' && Number.isFinite(v) ? v.toFixed(2) : '');
   const fmtInt = (v: number | undefined | null) => (typeof v === 'number' && Number.isFinite(v) ? String(Math.max(0, Math.round(v))) : '');

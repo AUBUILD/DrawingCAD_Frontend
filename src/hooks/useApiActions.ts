@@ -6,6 +6,7 @@ import {
   defaultDevelopment,
   INITIAL_SPAN,
   buildQuantityExportOverlayPayload,
+  toPreviewPayloadSingle,
 } from '../services';
 import {
   applyBasicPreferenceToNodes,
@@ -16,6 +17,7 @@ import {
 import {
   exportDxf,
   importDxf,
+  importDxfBatch,
   saveState,
   uploadTemplateDxf,
   clearTemplateDxf,
@@ -30,7 +32,12 @@ import type { Selection } from '../services';
 
 interface UseApiActionsParams {
   dev: DevelopmentIn;
+  developments: DevelopmentIn[];
+  exportMode: 'single' | 'all';
+  setExportMode: React.Dispatch<React.SetStateAction<'single' | 'all'>>;
   setDev: React.Dispatch<React.SetStateAction<DevelopmentIn>>;
+  setDevelopments: React.Dispatch<React.SetStateAction<DevelopmentIn[]>>;
+  setActiveDevIdx: React.Dispatch<React.SetStateAction<number>>;
   appCfg: AppConfig;
   setAppCfg: React.Dispatch<React.SetStateAction<AppConfig>>;
   payload: any;
@@ -58,7 +65,12 @@ interface UseApiActionsParams {
 
 export function useApiActions({
   dev,
+  developments,
+  exportMode,
+  setExportMode,
   setDev,
+  setDevelopments,
+  setActiveDevIdx,
   appCfg,
   setAppCfg,
   payload,
@@ -114,18 +126,39 @@ export function useApiActions({
   const onExportDxf = useCallback(async () => {
     try {
       setBusy(true);
-      const dxfQuantityOverlay = buildQuantityExportOverlayPayload(dev, recubrimientoM, sectionXU, quantityDisplay);
-      const blob = await exportDxf(
-        { ...payload, savedCuts, dxf_quantity_overlay: dxfQuantityOverlay } as any,
-        { cascoLayer, steelLayer, drawSteel }
-      );
-      downloadBlob(blob, `beamdrawing-${(dev.name ?? 'desarrollo').replace(/\s+/g, '_')}.dxf`);
+
+      if (exportMode === 'all' && developments.length > 1) {
+        // Sort by beam number (ascending) so smallest is at bottom in DXF
+        const sorted = [...developments].sort((a, b) => {
+          const numA = parseInt((a.name ?? '').match(/\d+/)?.[0] ?? '999', 10);
+          const numB = parseInt((b.name ?? '').match(/\d+/)?.[0] ?? '999', 10);
+          return numA - numB;
+        });
+        // Export all developments spaced vertically (first = bottom)
+        const VERTICAL_SPACING = 3.0; // meters between each beam
+        const spacedDevs = sorted.map((d, i) => {
+          const yOffset = i * VERTICAL_SPACING;
+          const single = toPreviewPayloadSingle(d);
+          return { ...single, y0: (single.y0 ?? 0) + yOffset };
+        });
+        const multiPayload = { developments: spacedDevs, savedCuts } as any;
+        const blob = await exportDxf(multiPayload, { cascoLayer, steelLayer, drawSteel });
+        downloadBlob(blob, `beamdrawing-All.dxf`);
+      } else {
+        // Export only the active development
+        const dxfQuantityOverlay = buildQuantityExportOverlayPayload(dev, recubrimientoM, sectionXU, quantityDisplay);
+        const blob = await exportDxf(
+          { ...payload, savedCuts, dxf_quantity_overlay: dxfQuantityOverlay } as any,
+          { cascoLayer, steelLayer, drawSteel }
+        );
+        downloadBlob(blob, `beamdrawing-${(dev.name ?? 'desarrollo').replace(/\s+/g, '_')}.dxf`);
+      }
     } catch (e: any) {
       setError(e?.message ?? String(e));
     } finally {
       setBusy(false);
     }
-  }, [payload, savedCuts, cascoLayer, steelLayer, drawSteel, dev.name, dev, recubrimientoM, sectionXU, quantityDisplay, setBusy, setError]);
+  }, [payload, savedCuts, cascoLayer, steelLayer, drawSteel, dev.name, dev, developments, exportMode, recubrimientoM, sectionXU, quantityDisplay, setBusy, setError]);
 
   const onUploadTemplate = useCallback(async (file: File) => {
     try {
@@ -233,6 +266,61 @@ export function useApiActions({
     setError(null);
   }, [jsonText, appCfg, setAppCfg, setDev, setError]);
 
+  const onImportDxfBatchFile = useCallback(async (file: File) => {
+    try {
+      setBusy(true);
+      setError(null);
+      setWarning(null);
+      const res = await importDxfBatch(file);
+      if (!res.developments?.length) {
+        setError('El DXF no contiene desarrollos validos.');
+        return;
+      }
+
+      // Mantener h/b del Tramo 1 actual
+      const span1 = (dev.spans ?? [])[0] ?? INITIAL_SPAN;
+      const h0 = span1.h;
+      const b0 = span1.b ?? INITIAL_SPAN.b ?? 0;
+
+      const normalizedDevs = res.developments.map((d: DevelopmentIn) => {
+        let incoming: DevelopmentIn = {
+          ...d,
+          spans: (d.spans ?? []).map((s: SpanIn) => ({ ...s, h: h0, b: b0 })),
+        };
+
+        // Aplicar preferencia de acero
+        if (defaultPref === 'basico' || defaultPref === 'basico_bastones') {
+          const applyN = defaultPref === 'basico_bastones' ? applyBasicBastonesPreferenceToNodes : applyBasicPreferenceToNodes;
+          let updatedNodes = incoming.nodes;
+          let updatedSpans = incoming.spans;
+          if (incoming.nodes && incoming.nodes.length > 0) {
+            updatedNodes = applyN([...incoming.nodes]);
+          }
+          if (incoming.spans && incoming.spans.length > 0) {
+            updatedSpans = defaultPref === 'basico_bastones'
+              ? applyBasicBastonesPreferenceToSpans([...incoming.spans], updatedNodes)
+              : applyBasicPreferenceToSpans([...incoming.spans]);
+          }
+          incoming = { ...incoming, nodes: updatedNodes, spans: updatedSpans };
+        }
+
+        return normalizeDev(incoming, appCfg);
+      });
+
+      setDevelopments(normalizedDevs);
+      setActiveDevIdx(0);
+      setSelection({ kind: 'none' });
+      setDetailViewport(null);
+      setConcretoLocked(false);
+      if (normalizedDevs.length > 1) setExportMode('all');
+      if (res.warnings?.length) setWarning(res.warnings.join('\n'));
+    } catch (e: any) {
+      setError(e?.message ?? String(e));
+    } finally {
+      setBusy(false);
+    }
+  }, [dev, appCfg, defaultPref, setDevelopments, setActiveDevIdx, setBusy, setError, setWarning, setSelection, setDetailViewport, setConcretoLocked]);
+
   return {
     handleSaveManual,
     clearDevelopment,
@@ -240,6 +328,7 @@ export function useApiActions({
     onUploadTemplate,
     onClearTemplate,
     onImportDxfFile,
+    onImportDxfBatchFile,
     applyJsonToForm,
   };
 }
