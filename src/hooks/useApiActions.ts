@@ -1,5 +1,5 @@
 import { useCallback } from 'react';
-import type { DevelopmentIn, PreviewRequest, SpanIn } from '../types';
+import type { DevelopmentIn, ExportMode, PreviewRequest, SpanIn } from '../types';
 import type { AppConfig } from '../services';
 import {
   normalizeDev,
@@ -33,8 +33,8 @@ import type { Selection } from '../services';
 interface UseApiActionsParams {
   dev: DevelopmentIn;
   developments: DevelopmentIn[];
-  exportMode: 'single' | 'all';
-  setExportMode: React.Dispatch<React.SetStateAction<'single' | 'all'>>;
+  exportMode: ExportMode;
+  setExportMode: React.Dispatch<React.SetStateAction<ExportMode>>;
   setDev: React.Dispatch<React.SetStateAction<DevelopmentIn>>;
   setDevelopments: React.Dispatch<React.SetStateAction<DevelopmentIn[]>>;
   setActiveDevIdx: React.Dispatch<React.SetStateAction<number>>;
@@ -61,6 +61,7 @@ interface UseApiActionsParams {
   setSelection: React.Dispatch<React.SetStateAction<Selection>>;
   setDetailViewport: React.Dispatch<React.SetStateAction<any>>;
   setConcretoLocked: React.Dispatch<React.SetStateAction<boolean>>;
+  batchImportOrder: 'name' | 'location';
 }
 
 export function useApiActions({
@@ -94,6 +95,7 @@ export function useApiActions({
   setSelection,
   setDetailViewport,
   setConcretoLocked,
+  batchImportOrder,
 }: UseApiActionsParams) {
 
   const handleSaveManual = useCallback(async () => {
@@ -115,21 +117,36 @@ export function useApiActions({
   const clearDevelopment = useCallback(() => {
     const ok = window.confirm('¿Limpiar todos los datos y empezar un nuevo desarrollo?');
     if (!ok) return;
+    const fresh = defaultDevelopment(appCfg);
     setError(null);
     setWarning(null);
     setSelection({ kind: 'none' });
     setDetailViewport(null);
     setConcretoLocked(false);
-    setDev(defaultDevelopment(appCfg));
-  }, [appCfg, setDev, setError, setWarning, setSelection, setDetailViewport, setConcretoLocked]);
+    setDev(fresh);
+    setDevelopments([fresh]);
+    setActiveDevIdx(0);
+    setExportMode('single');
+  }, [appCfg, setDev, setDevelopments, setActiveDevIdx, setExportMode, setError, setWarning, setSelection, setDetailViewport, setConcretoLocked]);
 
   const onExportDxf = useCallback(async () => {
     try {
       setBusy(true);
 
-      if (exportMode === 'all' && developments.length > 1) {
+      if (exportMode !== 'single' && developments.length > 1) {
+        // Filter by beam type if needed
+        let devsToExport = developments;
+        if (exportMode === 'all_conv') {
+          devsToExport = developments.filter((d) => (d.beam_type ?? 'convencional') === 'convencional');
+        } else if (exportMode === 'all_prefab') {
+          devsToExport = developments.filter((d) => d.beam_type === 'prefabricada');
+        }
+        if (!devsToExport.length) {
+          setError('No hay vigas del tipo seleccionado para exportar.');
+          return;
+        }
         // Sort by beam number (ascending) so smallest is at bottom in DXF
-        const sorted = [...developments].sort((a, b) => {
+        const sorted = [...devsToExport].sort((a, b) => {
           const numA = parseInt((a.name ?? '').match(/\d+/)?.[0] ?? '999', 10);
           const numB = parseInt((b.name ?? '').match(/\d+/)?.[0] ?? '999', 10);
           return numA - numB;
@@ -143,12 +160,14 @@ export function useApiActions({
         });
         const multiPayload = { developments: spacedDevs, savedCuts } as any;
         const blob = await exportDxf(multiPayload, { cascoLayer, steelLayer, drawSteel });
-        downloadBlob(blob, `beamdrawing-All.dxf`);
+        const suffix = exportMode === 'all_conv' ? 'Conv' : exportMode === 'all_prefab' ? 'Prefab' : 'All';
+        downloadBlob(blob, `beamdrawing-${suffix}.dxf`);
       } else {
         // Export only the active development
+        const singlePayload = { developments: [dev] } as any;
         const dxfQuantityOverlay = buildQuantityExportOverlayPayload(dev, recubrimientoM, sectionXU, quantityDisplay);
         const blob = await exportDxf(
-          { ...payload, savedCuts, dxf_quantity_overlay: dxfQuantityOverlay } as any,
+          { ...singlePayload, savedCuts, dxf_quantity_overlay: dxfQuantityOverlay } as any,
           { cascoLayer, steelLayer, drawSteel }
         );
         downloadBlob(blob, `beamdrawing-${(dev.name ?? 'desarrollo').replace(/\s+/g, '_')}.dxf`);
@@ -271,7 +290,7 @@ export function useApiActions({
       setBusy(true);
       setError(null);
       setWarning(null);
-      const res = await importDxfBatch(file);
+      const res = await importDxfBatch(file, batchImportOrder);
       if (!res.developments?.length) {
         setError('El DXF no contiene desarrollos validos.');
         return;
@@ -319,7 +338,7 @@ export function useApiActions({
     } finally {
       setBusy(false);
     }
-  }, [dev, appCfg, defaultPref, setDevelopments, setActiveDevIdx, setBusy, setError, setWarning, setSelection, setDetailViewport, setConcretoLocked]);
+  }, [dev, appCfg, defaultPref, batchImportOrder, setDevelopments, setActiveDevIdx, setBusy, setError, setWarning, setSelection, setDetailViewport, setConcretoLocked]);
 
   return {
     handleSaveManual,
@@ -332,3 +351,4 @@ export function useApiActions({
     applyJsonToForm,
   };
 }
+

@@ -1,5 +1,9 @@
 export type SteelKind = 'continuous' | 'hook' | 'development';
 
+export type BeamType = 'convencional' | 'prefabricada';
+
+export type ExportMode = 'single' | 'all' | 'all_conv' | 'all_prefab';
+
 export type SupportType = 'columna_inferior' | 'columna_superior' | 'placa' | 'apoyo_intermedio' | 'ninguno';
 
 export type NodeIn = {
@@ -240,6 +244,10 @@ export type DevelopmentIn = {
 
   // Vigas transversales (perpendiculares al desarrollo)
   crossbeams?: Crossbeam[];
+
+  // Twin beam (convencional / prefabricada)
+  beam_type?: BeamType;   // default 'convencional'
+  twin_id?: string;       // UUID compartido entre gemelos
 };
 
 export type PreviewRequest = {

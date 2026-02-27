@@ -110,11 +110,13 @@ export async function importDxf(file: File): Promise<ImportDxfResponse> {
   return res.json();
 }
 
-export async function importDxfBatch(file: File): Promise<ImportDxfBatchResponse> {
+export async function importDxfBatch(file: File, orderBy: 'name' | 'location' = 'location'): Promise<ImportDxfBatchResponse> {
   const fd = new FormData();
   fd.append('file', file);
+  const q = new URLSearchParams();
+  q.set('order_by', orderBy);
 
-  const res = await fetch(`${BASE}/api/import-dxf-batch`, {
+  const res = await fetch(`${BASE}/api/import-dxf-batch?${q.toString()}`, {
     method: 'POST',
     body: fd,
   });
