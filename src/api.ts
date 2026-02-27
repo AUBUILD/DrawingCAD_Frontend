@@ -11,6 +11,12 @@ function normalizeBaseUrl(raw: unknown): string {
 const ENV = (import.meta as any).env ?? {};
 const BASE = normalizeBaseUrl(ENV.VITE_API_URL ?? ENV.VITE_API_BASE ?? '');
 
+export type BackendVersionInfo = {
+  service: string;
+  backend_version: string;
+  commit: string;
+};
+
 export async function fetchPreview(payload: PreviewRequest): Promise<PreviewResponse> {
   const res = await fetch(`${BASE}/api/preview`, {
     method: 'POST',
@@ -161,4 +167,13 @@ export async function clearTemplateDxf(): Promise<void> {
     const text = await res.text();
     throw new Error(text || `HTTP ${res.status}`);
   }
+}
+
+export async function fetchBackendVersion(): Promise<BackendVersionInfo> {
+  const res = await fetch(`${BASE}/api/version`, { method: 'GET' });
+  if (!res.ok) {
+    const text = await res.text();
+    throw new Error(text || `HTTP ${res.status}`);
+  }
+  return res.json();
 }

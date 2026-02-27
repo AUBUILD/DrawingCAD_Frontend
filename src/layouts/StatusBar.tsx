@@ -5,6 +5,8 @@ interface StatusBarProps {
   warning: string | null;
   error: string | null;
   saveStatus: 'saved' | 'saving' | 'error' | null;
+  backendVersion?: string | null;
+  frontendVersion?: string | null;
 }
 
 export const StatusBar: React.FC<StatusBarProps> = ({
@@ -12,6 +14,8 @@ export const StatusBar: React.FC<StatusBarProps> = ({
   warning,
   error,
   saveStatus,
+  backendVersion,
+  frontendVersion,
 }) => {
   return (
     <footer className="statusBar">
@@ -46,7 +50,7 @@ export const StatusBar: React.FC<StatusBarProps> = ({
       {error && <div className="statusItem statusItem--error">{error}</div>}
 
       <div className="statusItem" style={{ opacity: 0.4 }}>
-        DrawingCAD v1.0.0 - @Aubuild 2026
+        DrawingCAD FE {frontendVersion ?? 'dev'} | BE {backendVersion ?? 'unknown'} - @Aubuild 2026
       </div>
     </footer>
   );
