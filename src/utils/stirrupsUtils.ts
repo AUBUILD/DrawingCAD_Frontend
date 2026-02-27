@@ -83,7 +83,7 @@ const STIRRUPS_DEFAULTS_BY_H: Array<{
   { h_m: 0.425, sismico: { A_m: 0.05, b_n: 9, B_m: 0.1, c_n: 0, C_m: 0, R_m: 0.2 }, gravedad: { A_m: 0.05, b_n: 1, B_m: 0, c_n: 0, C_m: 0, R_m: 0.2 } },
   { h_m: 0.45, sismico: { A_m: 0.05, b_n: 9, B_m: 0.1, c_n: 0, C_m: 0, R_m: 0.2 }, gravedad: { A_m: 0.05, b_n: 1, B_m: 0, c_n: 0, C_m: 0, R_m: 0.2 } },
   { h_m: 0.475, sismico: { A_m: 0.05, b_n: 9, B_m: 0.1, c_n: 0, C_m: 0, R_m: 0.2 }, gravedad: { A_m: 0.05, b_n: 1, B_m: 0, c_n: 0, C_m: 0, R_m: 0.2 } },
-  { h_m: 0.5, sismico: { A_m: 0.05, b_n: 9, B_m: 0.1, c_n: 0, C_m: 0, R_m: 0.22 }, gravedad: { A_m: 0.05, b_n: 1, B_m: 0, c_n: 0, C_m: 0, R_m: 0.22 } },
+  { h_m: 0.5, sismico: { A_m: 0.05, b_n: 11, B_m: 0.1, c_n: 0, C_m: 0, R_m: 0.20 }, gravedad: { A_m: 0.05, b_n: 1, B_m: 0, c_n: 0, C_m: 0, R_m: 0.20 } },
   { h_m: 0.525, sismico: { A_m: 0.05, b_n: 9, B_m: 0.1, c_n: 0, C_m: 0, R_m: 0.225 }, gravedad: { A_m: 0.05, b_n: 1, B_m: 0, c_n: 0, C_m: 0, R_m: 0.225 } },
   { h_m: 0.55, sismico: { A_m: 0.05, b_n: 9, B_m: 0.125, c_n: 0, C_m: 0, R_m: 0.25 }, gravedad: { A_m: 0.05, b_n: 1, B_m: 0, c_n: 0, C_m: 0, R_m: 0.25 } },
   { h_m: 0.575, sismico: { A_m: 0.05, b_n: 10, B_m: 0.125, c_n: 0, C_m: 0, R_m: 0.25 }, gravedad: { A_m: 0.05, b_n: 1, B_m: 0, c_n: 0, C_m: 0, R_m: 0.25 } },
