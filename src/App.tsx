@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { fetchPreview } from './api';
-import type { BackendAppConfig, DevelopmentIn, PreviewResponse } from './types';
+import type { BackendAppConfig, BeamType, DevelopmentIn, ExportMode, PreviewResponse } from './types';
 import { getSteelLayoutSettings } from './steelLayout';
 import {
   mToUnits, spanIndexAtX, normalizeBastonCfg, normalizeDev,
@@ -40,6 +40,35 @@ type ThreeProjection = 'perspective' | 'orthographic';
 
 const DEFAULT_PREF_KEY = 'beamdraw:defaultPref';
 
+/** Sync geometry-only fields from `src` into `twin`, preserving twin's steel config. */
+function syncGeometryToTwin(src: DevelopmentIn, twin: DevelopmentIn): DevelopmentIn {
+  // Map spans: copy geometry (L, h, b) from src, keep steel/bastones/stirrups from twin
+  const spans = src.spans.map((s, i) => ({
+    ...(twin.spans[i] ?? twin.spans[twin.spans.length - 1] ?? s),
+    L: s.L, h: s.h, b: s.b,
+  }));
+  // Map nodes: copy geometry (a1, a2, b1, b2, projections) from src, keep steel from twin
+  const nodes = src.nodes.map((n, i) => ({
+    ...(twin.nodes[i] ?? twin.nodes[twin.nodes.length - 1] ?? n),
+    a1: n.a1, a2: n.a2, b1: n.b1, b2: n.b2,
+    project_a: n.project_a, project_b: n.project_b,
+    support_type: n.support_type,
+  }));
+  return {
+    ...twin,
+    spans,
+    nodes,
+    crossbeams: src.crossbeams,
+    floor_start: src.floor_start,
+    floor_end: src.floor_end,
+    level_type: src.level_type,
+    beam_no: src.beam_no,
+    d: src.d,
+    unit_scale: src.unit_scale,
+    recubrimiento: src.recubrimiento,
+  };
+}
+
 export default function App() {
   // ── UI state ──────────────────────────────────────────────
   const [tab, setTab] = useState<Tab>('concreto');
@@ -71,7 +100,7 @@ export default function App() {
   const detailViewportRef = useRef<Bounds | null>(detailViewport);
   const steelViewActive = tab === 'acero' || steelViewPinned;
   const [steelOverlayLayer, setSteelOverlayLayer] = useState<SteelOverlayLayer | null>(null);
-  const [exportMode, setExportMode] = useState<'single' | 'all'>('single');
+  const [exportMode, setExportMode] = useState<ExportMode>('single');
 
   useEffect(() => { if (tab === 'acero') setSteelViewPinned(true); }, [tab]);
 
@@ -90,6 +119,14 @@ export default function App() {
         const next = typeof action === 'function' ? action(current) : action;
         const copy = [...prev];
         copy[idx] = next;
+        // Sync geometry to twin (if linked)
+        const twinId = next.twin_id;
+        if (twinId) {
+          const twinIdx = copy.findIndex((d, i) => i !== idx && d.twin_id === twinId);
+          if (twinIdx >= 0) {
+            copy[twinIdx] = syncGeometryToTwin(next, copy[twinIdx]);
+          }
+        }
         return copy;
       });
     },
@@ -102,6 +139,7 @@ export default function App() {
   const [error, setError] = useState<string | null>(null);
   const [warning, setWarning] = useState<string | null>(null);
   const [showNT, setShowNT] = useState(true);
+  const [batchImportOrder, setBatchImportOrder] = useState<'name' | 'location'>('location');
   const [zoomEnabled, setZoomEnabled] = useState(true);
   const [saveStatus, setSaveStatus] = useState<'saved' | 'saving' | 'error' | null>(null);
   const [concretoLocked, setConcretoLocked] = useState(false);
@@ -193,7 +231,7 @@ export default function App() {
     quantityDisplay, sectionXU, recubrimientoM: appCfg.recubrimiento,
     setBusy, setError, setWarning,
     setTemplateName, setTemplateLayers, setCascoLayer, setSteelLayer,
-    jsonText, setSaveStatus, setSelection, setDetailViewport, setConcretoLocked,
+    jsonText, setSaveStatus, setSelection, setDetailViewport, setConcretoLocked, batchImportOrder,
   });
 
   const {
@@ -329,11 +367,75 @@ export default function App() {
 
   const onRemoveDev = useCallback((idx: number) => {
     if (developments.length <= 1) return;
-    setDevelopments((prev) => prev.filter((_, i) => i !== idx));
+    const removing = developments[idx];
+    setDevelopments((prev) => {
+      const copy = prev.filter((_, i) => i !== idx);
+      // Unlink twin if removing a linked dev
+      if (removing?.twin_id) {
+        const twinIdx = copy.findIndex((d) => d.twin_id === removing.twin_id);
+        if (twinIdx >= 0) copy[twinIdx] = { ...copy[twinIdx], twin_id: undefined };
+      }
+      return copy;
+    });
     setActiveDevIdx((prev) => Math.min(prev, developments.length - 2));
     setSelection({ kind: 'none' });
     setDetailViewport(null);
-  }, [developments.length]);
+  }, [developments]);
+
+  // ── Twin beam handlers ──────────────────────────────────
+  const onCreateTwin = useCallback((idx: number) => {
+    const source = developments[idx];
+    if (!source || source.twin_id) return; // already has a twin
+    const twinId = crypto.randomUUID();
+    // Clone geometry, reset steel to defaults
+    const clone: DevelopmentIn = {
+      ...defaultDevelopment(appCfg),
+      // Copy geometry from source
+      spans: source.spans.map((s) => ({
+        ...defaultDevelopment(appCfg).spans[0],
+        L: s.L, h: s.h, b: s.b,
+      })),
+      nodes: source.nodes.map((n) => ({
+        ...defaultDevelopment(appCfg).nodes[0],
+        a1: n.a1, a2: n.a2, b1: n.b1, b2: n.b2,
+        project_a: n.project_a, project_b: n.project_b,
+        support_type: n.support_type,
+      })),
+      crossbeams: source.crossbeams,
+      name: (source.name ?? 'Desarrollo') + ' (Prefab)',
+      floor_start: source.floor_start,
+      floor_end: source.floor_end,
+      level_type: source.level_type,
+      beam_no: source.beam_no,
+      d: source.d,
+      unit_scale: source.unit_scale,
+      recubrimiento: source.recubrimiento,
+      beam_type: 'prefabricada' as BeamType,
+      twin_id: twinId,
+    };
+    setDevelopments((prev) => {
+      const copy = [...prev];
+      // Mark original as convencional with twin_id
+      copy[idx] = { ...copy[idx], beam_type: 'convencional', twin_id: twinId };
+      // Insert clone right after the original
+      copy.splice(idx + 1, 0, normalizeDev(clone, appCfg));
+      return copy;
+    });
+    setActiveDevIdx(idx + 1);
+    setSelection({ kind: 'none' });
+    setDetailViewport(null);
+  }, [developments, appCfg]);
+
+  const onToggleTwin = useCallback(() => {
+    const current = developments[activeDevIdx];
+    if (!current?.twin_id) return;
+    const twinIdx = developments.findIndex((d, i) => i !== activeDevIdx && d.twin_id === current.twin_id);
+    if (twinIdx >= 0) {
+      setActiveDevIdx(twinIdx);
+      setSelection({ kind: 'none' });
+      setDetailViewport(null);
+    }
+  }, [developments, activeDevIdx]);
 
   // ── Render ────────────────────────────────────────────────
   if (!dev || !appCfg) {
@@ -366,6 +468,8 @@ export default function App() {
           onSelectDev={onSelectDev}
           onAddDev={onAddDev}
           onRemoveDev={onRemoveDev}
+          onCreateTwin={onCreateTwin}
+          onToggleTwin={onToggleTwin}
           saveStatus={saveStatus}
           steelOverlayLayer={steelOverlayLayer}
           setSteelOverlayLayer={setSteelOverlayLayer}
@@ -399,6 +503,7 @@ export default function App() {
           concreteTabProps={{
             dev, selection, spansCols, nodesCols, busy, concretoLocked,
             showNT, setConcretoLocked, setShowNT,
+            batchImportOrder, setBatchImportOrder,
             clearDevelopment, onImportDxfFile, onImportDxfBatchFile, onSave: handleSaveManual,
             addSpan, removeSpan, updateDevPatch, updateSpan, updateNode,
             applySelection, onGridKeyDown, formatOrdinalEs,

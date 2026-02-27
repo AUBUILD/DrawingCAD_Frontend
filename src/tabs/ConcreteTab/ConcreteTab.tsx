@@ -19,10 +19,12 @@ export interface ConcreteTabProps {
   busy: boolean;
   concretoLocked: boolean;
   showNT: boolean;
+  batchImportOrder: 'name' | 'location';
 
   // State setters
   setConcretoLocked: (locked: boolean) => void;
   setShowNT: (show: boolean) => void;
+  setBatchImportOrder: React.Dispatch<React.SetStateAction<'name' | 'location'>>;
 
   // Actions
   clearDevelopment: () => void;
@@ -68,8 +70,10 @@ const ConcreteTabInner: React.FC<ConcreteTabProps> = ({
   busy,
   concretoLocked,
   showNT,
+  batchImportOrder,
   setConcretoLocked,
   setShowNT,
+  setBatchImportOrder,
   clearDevelopment,
   onImportDxfFile,
   onImportDxfBatchFile,
@@ -112,6 +116,19 @@ const ConcreteTabInner: React.FC<ConcreteTabProps> = ({
           >
             Batch DXF
           </button>
+          <label className="field" style={{ minWidth: 170, marginBottom: 0 }}>
+            <div className="label">Orden batch</div>
+            <select
+              className="input"
+              value={batchImportOrder}
+              disabled={busy}
+              onChange={(e) => setBatchImportOrder(e.target.value as 'name' | 'location')}
+              title="Criterio de orden para importación múltiple"
+            >
+              <option value="name">Por nombre</option>
+              <option value="location">Por ubicación (arriba→abajo, izq→der)</option>
+            </select>
+          </label>
           <button className="btnSmall" type="button" onClick={clearDevelopment} disabled={busy} title="Reiniciar el desarrollo">
             Limpiar
           </button>
