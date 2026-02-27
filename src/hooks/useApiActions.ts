@@ -117,7 +117,7 @@ export function useApiActions({
   const clearDevelopment = useCallback(() => {
     const ok = window.confirm('¿Limpiar todos los datos y empezar un nuevo desarrollo?');
     if (!ok) return;
-    const fresh = defaultDevelopment(appCfg);
+    const fresh = normalizeDev(defaultDevelopment(appCfg), appCfg);
     setError(null);
     setWarning(null);
     setSelection({ kind: 'none' });
