@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { fetchPreview } from './api';
+import { fetchBackendVersion, fetchPreview } from './api';
 import type { BackendAppConfig, BeamType, DevelopmentIn, ExportMode, PreviewResponse } from './types';
 import { getSteelLayoutSettings } from './steelLayout';
 import {
@@ -138,11 +138,28 @@ export default function App() {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [warning, setWarning] = useState<string | null>(null);
+  const [backendVersion, setBackendVersion] = useState<string | null>(null);
   const [showNT, setShowNT] = useState(true);
   const [batchImportOrder, setBatchImportOrder] = useState<'name' | 'location'>('location');
   const [zoomEnabled, setZoomEnabled] = useState(true);
   const [saveStatus, setSaveStatus] = useState<'saved' | 'saving' | 'error' | null>(null);
   const [concretoLocked, setConcretoLocked] = useState(false);
+  const frontendVersion = ((import.meta as any).env?.VITE_APP_VERSION as string | undefined) ?? 'dev';
+
+  useEffect(() => {
+    let alive = true;
+    fetchBackendVersion()
+      .then((v) => {
+        if (!alive) return;
+        const be = `${v.backend_version ?? 'dev'} (${v.commit ?? 'unknown'})`;
+        setBackendVersion(be);
+      })
+      .catch(() => {
+        if (!alive) return;
+        setBackendVersion('unknown');
+      });
+    return () => { alive = false; };
+  }, []);
 
   const [defaultPref, setDefaultPref] = useState<DefaultPreferenceId>(() => {
     const saved = safeGetLocalStorage(DEFAULT_PREF_KEY);
@@ -564,7 +581,14 @@ export default function App() {
         />
       }
       statusBar={
-        <StatusBar busy={busy} warning={warning} error={error} saveStatus={saveStatus} />
+        <StatusBar
+          busy={busy}
+          warning={warning}
+          error={error}
+          saveStatus={saveStatus}
+          backendVersion={backendVersion}
+          frontendVersion={frontendVersion}
+        />
       }
     />
   );
