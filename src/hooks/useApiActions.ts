@@ -21,6 +21,7 @@ import {
   saveState,
   uploadTemplateDxf,
   clearTemplateDxf,
+  type VariantScope,
 } from '../api';
 import {
   clampNumber,
@@ -29,6 +30,7 @@ import {
 } from '../utils';
 import { downloadBlob } from '../services';
 import type { Selection } from '../services';
+import { exportMetradoSingle, exportMetradoAll } from '../tabs/MetradoTab/metradoExport';
 
 interface UseApiActionsParams {
   dev: DevelopmentIn;
@@ -62,6 +64,8 @@ interface UseApiActionsParams {
   setDetailViewport: React.Dispatch<React.SetStateAction<any>>;
   setConcretoLocked: React.Dispatch<React.SetStateAction<boolean>>;
   batchImportOrder: 'name' | 'location';
+  authToken: string | null;
+  variantScope: VariantScope | null;
 }
 
 export function useApiActions({
@@ -96,13 +100,15 @@ export function useApiActions({
   setDetailViewport,
   setConcretoLocked,
   batchImportOrder,
+  authToken,
+  variantScope,
 }: UseApiActionsParams) {
 
   const handleSaveManual = useCallback(async () => {
     try {
       setBusy(true);
       setSaveStatus('saving');
-      await saveState(payload);
+      await saveState(payload, { token: authToken, variant: variantScope });
       setSaveStatus('saved');
       setTimeout(() => setSaveStatus(null), 2000);
     } catch (err: any) {
@@ -112,7 +118,7 @@ export function useApiActions({
     } finally {
       setBusy(false);
     }
-  }, [payload, setBusy, setSaveStatus, setError]);
+  }, [payload, setBusy, setSaveStatus, setError, authToken, variantScope]);
 
   const clearDevelopment = useCallback(() => {
     const ok = window.confirm('¿Limpiar todos los datos y empezar un nuevo desarrollo?');
@@ -213,20 +219,18 @@ export function useApiActions({
     }
   }, [setBusy, setError, setTemplateName, setTemplateLayers, setCascoLayer, setSteelLayer]);
 
-  const onImportDxfFile = useCallback(async (file: File) => {
+  const onImportDxfFile = useCallback(async (file: File, config?: { h?: number; b?: number }) => {
     try {
       setBusy(true);
       setError(null);
       setWarning(null);
       const res = await importDxf(file);
-      // El DXF define geometría (L y nodos). Mantén h/b según el Tramo 1 actual.
+      // Use config h/b if provided, otherwise fall back to current span1 values.
       const span1 = (dev.spans ?? [])[0] ?? INITIAL_SPAN;
-      const h0 = span1.h;
-      const b0 = span1.b ?? INITIAL_SPAN.b ?? 0;
+      const h0 = config?.h ?? span1.h;
+      const b0 = config?.b ?? span1.b ?? INITIAL_SPAN.b ?? 0;
       let incoming: DevelopmentIn = {
         ...res.development,
-        floor_start: (dev as any).floor_start ?? '6to',
-        floor_end: (dev as any).floor_end ?? '9no',
         spans: (res.development.spans ?? []).map((s: SpanIn) => ({ ...s, h: h0, b: b0 })),
       };
 
@@ -285,7 +289,7 @@ export function useApiActions({
     setError(null);
   }, [jsonText, appCfg, setAppCfg, setDev, setError]);
 
-  const onImportDxfBatchFile = useCallback(async (file: File) => {
+  const onImportDxfBatchFile = useCallback(async (file: File, config?: { h?: number; b?: number }): Promise<DevelopmentIn[]> => {
     try {
       setBusy(true);
       setError(null);
@@ -293,18 +297,22 @@ export function useApiActions({
       const res = await importDxfBatch(file, batchImportOrder);
       if (!res.developments?.length) {
         setError('El DXF no contiene desarrollos validos.');
-        return;
+        return [];
       }
 
-      // Mantener h/b del Tramo 1 actual
+      // Use DXF-extracted b/h per span when available, fall back to config values.
       const span1 = (dev.spans ?? [])[0] ?? INITIAL_SPAN;
-      const h0 = span1.h;
-      const b0 = span1.b ?? INITIAL_SPAN.b ?? 0;
+      const h0 = config?.h ?? span1.h;
+      const b0 = config?.b ?? span1.b ?? INITIAL_SPAN.b ?? 0;
 
       const normalizedDevs = res.developments.map((d: DevelopmentIn) => {
         let incoming: DevelopmentIn = {
           ...d,
-          spans: (d.spans ?? []).map((s: SpanIn) => ({ ...s, h: h0, b: b0 })),
+          spans: (d.spans ?? []).map((s: SpanIn) => ({
+            ...s,
+            b: s.b ?? b0,
+            h: h0,
+          })),
         };
 
         // Aplicar preferencia de acero
@@ -333,17 +341,45 @@ export function useApiActions({
       setConcretoLocked(false);
       if (normalizedDevs.length > 1) setExportMode('all');
       if (res.warnings?.length) setWarning(res.warnings.join('\n'));
+      return normalizedDevs;
     } catch (e: any) {
       setError(e?.message ?? String(e));
+      return [];
     } finally {
       setBusy(false);
     }
   }, [dev, appCfg, defaultPref, batchImportOrder, setDevelopments, setActiveDevIdx, setBusy, setError, setWarning, setSelection, setDetailViewport, setConcretoLocked]);
 
+  const onExportMetrado = useCallback(async () => {
+    try {
+      setBusy(true);
+      if (exportMode !== 'single' && developments.length > 1) {
+        let devsToExport = developments;
+        if (exportMode === 'all_conv') {
+          devsToExport = developments.filter((d) => (d.beam_type ?? 'convencional') === 'convencional');
+        } else if (exportMode === 'all_prefab') {
+          devsToExport = developments.filter((d) => d.beam_type === 'prefabricada');
+        }
+        if (!devsToExport.length) {
+          setError('No hay vigas del tipo seleccionado para exportar.');
+          return;
+        }
+        await exportMetradoAll(devsToExport.map((d) => ({ dev: d, recubrimiento: d.recubrimiento ?? recubrimientoM })));
+      } else {
+        await exportMetradoSingle(dev, dev.recubrimiento ?? recubrimientoM);
+      }
+    } catch (e: any) {
+      setError(e?.message ?? String(e));
+    } finally {
+      setBusy(false);
+    }
+  }, [dev, developments, exportMode, recubrimientoM, setBusy, setError]);
+
   return {
     handleSaveManual,
     clearDevelopment,
     onExportDxf,
+    onExportMetrado,
     onUploadTemplate,
     onClearTemplate,
     onImportDxfFile,

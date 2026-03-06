@@ -13,7 +13,7 @@ import {
   applyBasicBastonesPreferenceToNodes,
   applyBasicBastonesPreferenceToSpans,
 } from '../services/steelService';
-import { fetchState, saveState, getTemplateDxf } from '../api';
+import { fetchState, saveState, getTemplateDxf, type VariantScope } from '../api';
 import {
   clampNumber,
   safeSetLocalStorage,
@@ -50,6 +50,8 @@ interface UseInitDataParams {
   steelTextRotationDraft: string;
   slabProjOffsetDraft: string;
   slabProjLayerDraft: string;
+  authToken: string | null;
+  variantScope: VariantScope | null;
 }
 
 export function useInitData({
@@ -80,15 +82,18 @@ export function useInitData({
   steelTextRotationDraft,
   slabProjOffsetDraft,
   slabProjLayerDraft,
+  authToken,
+  variantScope,
 }: UseInitDataParams) {
 
   // Cargar estado persistido (si existe backend/DB). Ignora fallos.
   useEffect(() => {
+    if (!authToken) return;
     let cancelled = false;
     (async () => {
       let loaded = false;
       try {
-        const stored = await fetchState();
+        const stored = await fetchState({ token: authToken, variant: variantScope });
         if (cancelled) return;
         if (stored?.developments?.length) {
           loaded = true;
@@ -153,7 +158,7 @@ export function useInitData({
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [authToken, variantScope, defaultPref]);
 
   // Auto-guardar preferencia "Personalizado" (debounced) para usarla como default.
   useEffect(() => {
@@ -214,10 +219,11 @@ export function useInitData({
 
   // Guardar estado persistido (debounced). Ignora fallos.
   useEffect(() => {
+    if (!authToken) return;
     setSaveStatus('saving');
     const t = window.setTimeout(async () => {
       try {
-        await saveState(payload);
+        await saveState(payload, { token: authToken, variant: variantScope });
         setSaveStatus('saved');
         // Ocultar mensaje después de 2 segundos
         setTimeout(() => setSaveStatus(null), 2000);
@@ -229,5 +235,5 @@ export function useInitData({
       }
     }, 600);
     return () => window.clearTimeout(t);
-  }, [payload]);
+  }, [payload, authToken, variantScope]);
 }

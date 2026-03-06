@@ -1,3 +1,5 @@
+@import "./styles/colors.css";
+
 :root {
   color-scheme: dark;
   --cut-color: rgb(249, 115, 22);
@@ -5,9 +7,238 @@
 
 body {
   margin: 0;
-  font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, 'Apple Color Emoji', 'Segoe UI Emoji';
+  font-family: 'Inter', 'SF Pro Display', 'Segoe UI', system-ui, -apple-system, sans-serif;
   background: #0b1220;
   color: #e5e7eb;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+.aubTopbar {
+  height: 46px;
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 0 16px;
+  background: #141c2e;
+  border-bottom: 1px solid #1e2d48;
+  z-index: 20;
+}
+
+.aubTopBrand {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding-right: 12px;
+  border-right: 1px solid #1e2d48;
+}
+
+.aubTopDot {
+  width: 6px;
+  height: 6px;
+  border-radius: 2px;
+  background: #00d4a8;
+  box-shadow: 0 0 8px rgba(0, 212, 168, 0.55);
+}
+
+.aubTopLogo {
+  font-size: 12px;
+  font-weight: 900;
+  letter-spacing: 0.2em;
+  color: #00d4a8;
+}
+
+.aubToggleBtn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border-radius: 6px;
+  background: transparent;
+  border: 1px solid #1e2d48;
+  cursor: pointer;
+  box-shadow: none;
+  padding: 0;
+}
+
+.aubBeamCtx {
+  display: flex;
+  flex-direction: column;
+  line-height: 1.1;
+}
+
+.aubBeamCode {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 13px;
+  font-weight: 900;
+  color: #00d4a8;
+}
+
+.aubBeamSub {
+  font-size: 8.5px;
+  color: #627494;
+}
+
+.aubWidthCtrl {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin-left: 4px;
+}
+
+.aubWidthLabel {
+  font-size: 9px;
+  color: #627494;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.aubWidthRange {
+  width: 120px;
+  accent-color: #00d4a8;
+  cursor: pointer;
+}
+
+.aubTopRight {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.aubUserChip {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 4px 10px;
+  border-radius: 6px;
+  border: 1px solid #1e2d48;
+  background: #1a2338;
+  color: #627494;
+  font-size: 9.5px;
+}
+
+.aubGhostBtn,
+.aubLogoutBtn {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 4px 10px;
+  border-radius: 6px;
+  border: 1px solid #1e2d48;
+  font-size: 9.5px;
+  font-weight: 700;
+  cursor: pointer;
+  box-shadow: none;
+}
+
+.aubGhostBtn {
+  background: transparent;
+  color: #627494;
+}
+
+.aubLogoutBtn {
+  background: rgba(255, 77, 106, 0.08);
+  border-color: rgba(255, 77, 106, 0.25);
+  color: #ff4d6a;
+}
+
+.aubGhostBtn:hover,
+.aubLogoutBtn:hover,
+.aubEdgeIcon:hover,
+.aubToggleBtn:hover {
+  transform: none !important;
+  box-shadow: none !important;
+}
+
+.aubGhostBtn:hover {
+  background: rgba(255, 255, 255, 0.04) !important;
+}
+
+.aubLogoutBtn:hover {
+  background: rgba(255, 77, 106, 0.12) !important;
+}
+
+.aubBody {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  overflow: hidden;
+}
+
+.aubSidebarDivider {
+  position: relative;
+  width: 2px;
+  flex-shrink: 0;
+  background: rgba(80, 96, 128, 0.35);
+  border-left: none;
+  border-right: none;
+  cursor: col-resize;
+  transition: background 0.14s ease, box-shadow 0.14s ease;
+}
+
+.aubSidebarDivider::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: -6px;
+  right: -6px;
+}
+
+.aubSidebarDivider:hover,
+.aubSidebarDivider.isDragging {
+  background: rgba(0, 212, 168, 0.7);
+  box-shadow: 0 0 0 1px rgba(0, 212, 168, 0.18);
+}
+
+.aubMain {
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.sidebar {
+  transition: width 0.22s cubic-bezier(.4,0,.2,1), opacity 0.18s ease, transform 0.22s cubic-bezier(.4,0,.2,1);
+}
+
+.sidebar-content {
+  transition: opacity 0.15s ease;
+}
+
+.aubToggleBtn:hover {
+  background: rgba(0,212,168,0.1) !important;
+  border-color: rgba(0,212,168,0.3) !important;
+}
+
+.aubEdgeStrip {
+  width: 32px;
+  flex-shrink: 0;
+  background: #141c2e;
+  border-right: 1px solid #1e2d48;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding-top: 10px;
+  gap: 6px;
+}
+
+.aubEdgeIcon {
+  width: 24px;
+  height: 24px;
+  border-radius: 5px;
+  background: transparent;
+  border: 1px solid transparent;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  box-shadow: none;
 }
 
 .layout {
@@ -32,8 +263,10 @@ body {
 .title {
   font-size: 15px;
   font-weight: 800;
-  letter-spacing: 0.5px;
+  letter-spacing: 1.5px;
   color: #5eead4;
+  font-family: 'JetBrains Mono', 'Inter', monospace;
+  text-transform: uppercase;
 }
 
 .subtitle {
@@ -47,39 +280,65 @@ body {
   gap: 10px;
 }
 
+button {
+  background: rgba(255, 255, 255, 0.02);
+  color: #cbd5e1;
+  border: 1px solid rgba(255, 255, 255, 0.10);
+  padding: 8px 12px;
+  border-radius: 8px;
+  font-weight: 600;
+  cursor: pointer;
+  font-size: 11px;
+  letter-spacing: 0.3px;
+  transition: background 0.15s ease, border-color 0.15s ease, color 0.15s ease;
+  box-shadow: none;
+}
+
+button:hover:not(:disabled) {
+  background: rgba(255, 255, 255, 0.06);
+  border-color: rgba(255, 255, 255, 0.22);
+  color: #e2e8f0;
+}
+
+button:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
 .segmented {
   display: inline-flex;
   border: 1px solid rgba(20, 184, 166, 0.18);
   border-radius: 8px;
   overflow: hidden;
-  background: rgba(0, 0, 0, 0.30);
+  background: rgba(2, 6, 23, 0.56);
   width: 100%;
-  box-shadow: inset 0 1px 3px rgba(0, 0, 0, 0.2);
+  box-shadow: none;
 }
 
 .segBtn {
   border: none;
   background: transparent;
-  color: rgba(229, 231, 235, 0.6);
-  padding: 10px 10px;
-  cursor: pointer;
+  color: #93a4c3;
+  padding: 7px 10px;
   font-weight: 700;
   font-size: 12px;
   flex: 1 1 0;
   text-align: center;
-  transition: all 0.15s ease;
+  transition: background 0.15s ease, color 0.15s ease;
   letter-spacing: 0.3px;
+  border-radius: 0;
+  box-shadow: none;
 }
 
 .segBtn:hover {
-  background: rgba(20, 184, 166, 0.08);
-  color: rgba(229, 231, 235, 0.85);
+  background: rgba(255, 255, 255, 0.05);
+  color: #dbe7ff;
 }
 
 .segBtnActive {
-  background: rgba(20, 184, 166, 0.25);
-  color: #5eead4;
-  box-shadow: inset 0 -2px 0 rgba(20, 184, 166, 0.5);
+  background: rgba(0, 212, 168, 0.18);
+  color: #dcfdf7;
+  box-shadow: none;
 }
 
 .btn {
@@ -103,23 +362,22 @@ body {
 }
 
 .btnSecondary {
-  background: rgba(255,255,255,0.08);
-  color: #e5e7eb;
-  border: 1px solid rgba(255,255,255,0.12);
+  background: rgba(255, 255, 255, 0.04);
+  color: #cbd5e1;
+  border: 1px solid rgba(255, 255, 255, 0.14);
   padding: 10px 12px;
   border-radius: 10px;
   font-weight: 700;
-  cursor: pointer;
+  box-shadow: none;
 }
 
 .btnSmall {
-  background: rgba(20,184,166,0.22);
-  color: #e5e7eb;
-  border: 1px solid rgba(20,184,166,0.30);
+  background: linear-gradient(135deg, #14b8a6 0%, #0d9488 100%);
+  color: #031712;
+  border: none;
   padding: 7px 10px;
   border-radius: 10px;
   font-weight: 800;
-  cursor: pointer;
   font-size: 12px;
 }
 
@@ -132,25 +390,20 @@ body {
   width: 34px;
   height: 34px;
   border-radius: 10px;
-  border: 1px solid rgba(255,255,255,0.12);
-  background: rgba(0,0,0,0.18);
-  color: rgba(229,231,235,0.9);
-  cursor: pointer;
+  border: 1px solid rgba(20, 184, 166, 0.24);
+  background: rgba(2, 6, 23, 0.62);
+  color: #cbd5e1;
+  box-shadow: none;
 }
 
 .btnDanger {
-  background: rgba(239,68,68,0.16);
-  color: #fecaca;
-  border: 1px solid rgba(239,68,68,0.25);
+  background: rgba(255, 77, 106, 0.12);
+  color: #fecdd3;
+  border: 1px solid rgba(255, 77, 106, 0.3);
   padding: 10px 12px;
   border-radius: 10px;
   font-weight: 800;
-  cursor: pointer;
-}
-
-.btn:disabled {
-  opacity: 0.6;
-  cursor: not-allowed;
+  box-shadow: none;
 }
 
 .content {
@@ -622,7 +875,7 @@ input[type="range"].input {
   color: #e5e7eb;
   padding: 8px 10px;
   font-size: 12px;
-  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', 'Courier New', monospace;
+  font-family: 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
 }
 
 .cellInput:focus {
@@ -654,11 +907,11 @@ input[type="range"].input {
   width: 24px;
   height: 24px;
   border-radius: 10px;
-  border: 1px solid rgba(255,255,255,0.12);
-  background: rgba(0,0,0,0.18);
-  color: rgba(229,231,235,0.9);
-  cursor: pointer;
+  border: none;
+  background: linear-gradient(135deg, #14b8a6 0%, #0d9488 100%);
+  color: #031712;
   font-size: 12px;
+  padding: 0;
 }
 
 .thead,
@@ -687,7 +940,7 @@ input[type="range"].input {
 }
 
 .mono {
-  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', 'Courier New', monospace;
+  font-family: 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
   font-size: 12px;
 }
 
@@ -711,7 +964,7 @@ input[type="range"].input {
   background: rgba(0,0,0,0.25);
   color: #e5e7eb;
   padding: 10px;
-  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', 'Courier New', monospace;
+  font-family: 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
   font-size: 12px;
   line-height: 1.4;
 }
@@ -938,25 +1191,25 @@ input[type="range"].input {
 
 .steelLayerBtn {
   border: none;
-  background: transparent;
-  color: rgba(229, 231, 235, 0.6);
+  background: linear-gradient(135deg, #14b8a6 0%, #0d9488 100%);
+  color: #031712;
   padding: 7px 14px;
-  cursor: pointer;
   font-weight: 700;
   font-size: 11px;
   transition: all 0.15s ease;
   letter-spacing: 0.3px;
+  box-shadow: none;
 }
 
 .steelLayerBtn:hover {
-  background: rgba(20, 184, 166, 0.10);
-  color: rgba(229, 231, 235, 0.9);
+  background: linear-gradient(135deg, #2dd4bf 0%, #14b8a6 100%);
+  color: #031712;
 }
 
 .steelLayerBtnActive {
-  background: rgba(20, 184, 166, 0.28);
-  color: #5eead4;
-  box-shadow: inset 0 0 8px rgba(20, 184, 166, 0.15);
+  background: linear-gradient(135deg, #5eead4 0%, #2dd4bf 100%);
+  color: #02231d;
+  box-shadow: inset 0 0 8px rgba(2, 35, 29, 0.15);
 }
 
 @media (max-width: 1100px) {
@@ -984,4 +1237,755 @@ input[type="range"].input {
   .nameActions {
     justify-content: flex-start;
   }
+}
+
+/* ==========================================================================
+   AUBUILD STYLE GUIDE OVERRIDES — Dark theme (tokens.ts aligned)
+   ========================================================================== */
+html {
+  font-size: 75%;
+}
+
+html, body, #root {
+  height: 100%;
+}
+
+body {
+  background: var(--color-bg-page) !important;
+  color: var(--color-text-primary) !important;
+}
+
+:root {
+  color-scheme: dark;
+}
+
+.layout {
+  background:
+    radial-gradient(1200px 700px at -10% -20%, rgba(0, 201, 167, 0.06), transparent 40%),
+    radial-gradient(900px 600px at 120% 0%, rgba(108, 140, 245, 0.04), transparent 35%),
+    var(--color-bg-page) !important;
+}
+
+.header {
+  background: var(--color-bg-darkest) !important;
+  border-bottom: 1px solid var(--color-border-primary) !important;
+  box-shadow: var(--shadow-lg) !important;
+}
+
+.title {
+  color: var(--color-primary) !important;
+  letter-spacing: 0.4px;
+}
+
+.subtitle {
+  color: var(--color-text-secondary) !important;
+  opacity: 1 !important;
+}
+
+.content {
+  padding: 10px 12px;
+}
+
+.leftPane {
+  background: var(--color-bg-soft) !important;
+  border-right: 1px solid var(--color-border-primary) !important;
+}
+
+.rightPane {
+  background: transparent !important;
+}
+
+.btn,
+.btnSmall,
+.btnIcon {
+  background: var(--color-primary) !important;
+  color: var(--color-text-inverse) !important;
+  border: 1px solid var(--color-primary) !important;
+  box-shadow: none !important;
+  transition: all var(--transition-fast) !important;
+}
+
+.btn:hover:not(:disabled),
+.btnSmall:hover:not(:disabled),
+.btnIcon:hover:not(:disabled) {
+  background: var(--color-primary-hover) !important;
+  border-color: var(--color-primary-hover) !important;
+  transform: scale(0.98);
+}
+
+.btnSecondary {
+  background: var(--color-bg-card) !important;
+  color: var(--color-text-primary) !important;
+  border: 1px solid var(--color-border-primary) !important;
+}
+
+.btnSecondary:hover:not(:disabled) {
+  background: var(--color-bg-soft) !important;
+  border-color: var(--color-text-dim) !important;
+}
+
+.btnDanger {
+  background: rgba(255, 77, 106, 0.10) !important;
+  color: var(--color-accent) !important;
+  border: 1px solid rgba(255, 77, 106, 0.30) !important;
+}
+
+.btnDanger:hover:not(:disabled) {
+  background: rgba(255, 77, 106, 0.18) !important;
+  color: var(--color-accent-hover) !important;
+}
+
+.segmented {
+  border: 1px solid var(--color-border-primary) !important;
+  background: var(--color-bg-darkest) !important;
+  box-shadow: none !important;
+}
+
+.segBtn {
+  background: transparent !important;
+  color: var(--color-text-secondary) !important;
+  border-right: 1px solid var(--color-border-primary) !important;
+}
+
+.segBtn:hover {
+  background: var(--color-bg-card) !important;
+  color: var(--color-text-primary) !important;
+}
+
+.segBtnActive {
+  background: var(--color-primary) !important;
+  color: var(--color-text-inverse) !important;
+  box-shadow: none !important;
+}
+
+.panel,
+.panelOverview,
+.panelDetail {
+  background: var(--color-bg-card) !important;
+  border: 1px solid var(--color-border-primary) !important;
+  border-radius: 12px !important;
+  box-shadow: var(--shadow-card) !important;
+}
+
+.panelTitle {
+  color: var(--color-text-primary) !important;
+  opacity: 1 !important;
+  letter-spacing: 0.4px !important;
+}
+
+.panelSummary:hover {
+  background: var(--color-teal-bg) !important;
+}
+
+.muted,
+.mutedSmall,
+.hint,
+.label {
+  color: var(--color-text-secondary) !important;
+  opacity: 1 !important;
+}
+
+.input,
+.cellInput,
+.editor,
+select.input,
+textarea.input {
+  border: 1px solid var(--color-border-primary) !important;
+  background: var(--color-bg-darkest) !important;
+  color: var(--color-text-primary) !important;
+  border-radius: 8px !important;
+}
+
+.input:focus,
+.cellInput:focus,
+.editor:focus,
+select.input:focus,
+textarea.input:focus {
+  border-color: var(--color-primary) !important;
+  box-shadow: 0 0 0 2px var(--color-teal-border) !important;
+  outline: none !important;
+}
+
+.table,
+.tableContainer,
+.matrix {
+  background: var(--color-bg-soft) !important;
+  border: 1px solid var(--color-border-primary) !important;
+}
+
+.cell {
+  border-top: 1px solid var(--color-border-primary) !important;
+  border-right: 1px solid var(--color-border-primary) !important;
+}
+
+.cell.head {
+  background: var(--color-bg-card) !important;
+  color: var(--color-text-primary) !important;
+}
+
+.cell.rowLabel {
+  background: var(--color-bg-card) !important;
+  color: var(--color-text-secondary) !important;
+}
+
+.cellSelected {
+  background: var(--color-teal-bg) !important;
+  box-shadow: inset 0 0 0 1px var(--color-teal-border) !important;
+}
+
+.canvas,
+.canvas3d {
+  border: 1px solid var(--color-border-primary) !important;
+  background: var(--color-bg-darkest) !important;
+}
+
+.statusBar {
+  background: var(--color-bg-soft) !important;
+  border-top: 1px solid var(--color-border-primary) !important;
+  box-shadow: none !important;
+}
+
+.statusItem {
+  color: var(--color-text-secondary) !important;
+}
+
+.statusItem--info { color: var(--color-secondary) !important; }
+.statusItem--ok { color: #22c55e !important; }
+.statusItem--warn { color: var(--color-orange) !important; }
+.statusItem--error { color: var(--color-accent) !important; }
+
+.statusDot--ok {
+  background: #22c55e !important;
+  box-shadow: none !important;
+}
+
+.statusDot--error {
+  background: var(--color-accent) !important;
+  box-shadow: none !important;
+}
+
+.error {
+  background: rgba(255, 77, 106, 0.10) !important;
+  border: 1px solid rgba(255, 77, 106, 0.30) !important;
+  color: var(--color-accent) !important;
+}
+
+.warning {
+  background: rgba(245, 166, 35, 0.10) !important;
+  border: 1px solid rgba(245, 166, 35, 0.30) !important;
+  color: var(--color-orange) !important;
+}
+
+.saveIndicator--saving {
+  background: rgba(108, 140, 245, 0.10) !important;
+  border: 1px solid rgba(108, 140, 245, 0.30) !important;
+  color: var(--color-secondary) !important;
+}
+
+.saveIndicator--saved {
+  background: rgba(0, 201, 167, 0.10) !important;
+  border: 1px solid rgba(0, 201, 167, 0.30) !important;
+  color: var(--color-primary) !important;
+}
+
+.saveIndicator--error {
+  background: rgba(255, 77, 106, 0.10) !important;
+  border: 1px solid rgba(255, 77, 106, 0.30) !important;
+  color: var(--color-accent) !important;
+}
+
+.steelLayerSelector {
+  border: 1px solid var(--color-border-primary) !important;
+  background: var(--color-bg-darkest) !important;
+  box-shadow: none !important;
+}
+
+.steelLayerBtn {
+  background: transparent !important;
+  color: var(--color-text-secondary) !important;
+  border-right: 1px solid var(--color-border-primary) !important;
+}
+
+.steelLayerBtn:hover {
+  background: var(--color-bg-card) !important;
+  color: var(--color-text-primary) !important;
+}
+
+.steelLayerBtnActive {
+  background: var(--color-primary) !important;
+  color: var(--color-text-inverse) !important;
+}
+
+.projectCardsGrid {
+  display: grid;
+  gap: 10px;
+  grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+}
+
+.projectCard {
+  cursor: pointer;
+  transition: box-shadow 300ms ease, transform 150ms ease-in-out;
+}
+
+.projectCard:hover {
+  box-shadow: var(--shadow-lg) !important;
+  transform: translateY(-1px);
+}
+
+/* Viewer surfaces — dark for line contrast */
+.panelOverview,
+.panelDetail {
+  background: var(--color-bg-darkest) !important;
+  border: 1px solid var(--color-border-primary) !important;
+}
+
+.rightPane {
+  background: var(--color-bg-darkest) !important;
+  border-radius: 12px;
+}
+
+.rightPane > section + section {
+  margin-top: 8px;
+}
+
+.panelOverview .panelTitle,
+.panelDetail .panelTitle,
+.panelOverview .mutedSmall,
+.panelDetail .mutedSmall,
+.panelOverview .meta,
+.panelDetail .meta {
+  color: var(--color-text-primary) !important;
+}
+
+.panelOverview .segmented,
+.panelDetail .segmented {
+  background: var(--color-bg-darkest) !important;
+  border-color: var(--color-border-primary) !important;
+}
+
+.panelOverview .segBtn,
+.panelDetail .segBtn {
+  background: transparent !important;
+  color: var(--color-text-secondary) !important;
+  border-right-color: var(--color-border-primary) !important;
+}
+
+.panelOverview .segBtnActive,
+.panelDetail .segBtnActive {
+  background: var(--color-primary) !important;
+  color: var(--color-text-inverse) !important;
+}
+
+.panelOverview .btnIcon,
+.panelDetail .btnIcon {
+  background: var(--color-bg-soft) !important;
+  color: var(--color-text-primary) !important;
+  border: 1px solid var(--color-border-primary) !important;
+}
+
+.panelOverview .btnIcon:hover:not(:disabled),
+.panelDetail .btnIcon:hover:not(:disabled) {
+  background: var(--color-bg-card) !important;
+  border-color: var(--color-text-dim) !important;
+  transform: none !important;
+}
+
+.viewerToolbarScroll {
+  flex: 1 1 auto;
+  max-width: 100%;
+  overflow-x: auto;
+  overflow-y: hidden;
+  padding-bottom: 2px;
+}
+
+.viewerToolbarSplit {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 14px;
+  min-width: 0;
+}
+
+.viewerToolbarLeft {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  flex: 0 0 auto;
+}
+
+.viewerToolbar {
+  display: inline-flex;
+  flex-wrap: nowrap;
+  align-items: center;
+  gap: 10px;
+  min-width: max-content;
+  white-space: nowrap;
+}
+
+@media (max-width: 1200px) {
+  .viewerToolbarSplit {
+    gap: 10px;
+  }
+}
+
+.viewerCheck {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  white-space: nowrap;
+  font-size: 11px;
+}
+
+.viewerOpacity {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  white-space: nowrap;
+  font-size: 11px;
+}
+
+.viewerOpacityRange {
+  width: 76px;
+}
+
+.panelDetail .viewerToolbar .segmented {
+  border-radius: 6px;
+}
+
+.panelDetail .viewerToolbar .segBtn {
+  padding: 6px 12px !important;
+  font-size: 11px !important;
+  line-height: 1.1;
+}
+
+.panelDetail .viewerToolbar .btnIcon {
+  width: 30px;
+  height: 30px;
+  border-radius: 8px;
+  font-size: 11px;
+}
+
+.panelDetail .viewerToolbar input[type="checkbox"] {
+  width: 13px;
+  height: 13px;
+  margin: 0;
+}
+
+.panelDetail .viewerToolbar .mutedSmall {
+  font-size: 11px;
+}
+
+.panelOverview .canvas,
+.panelDetail .canvas,
+.panelOverview .canvas3d,
+.panelDetail .canvas3d {
+  background: var(--color-bg-darkest) !important;
+  border: 1px solid var(--color-border-primary) !important;
+}
+
+/* ═══════════════════════════════════════════
+   LEFT PANE — compact controls
+   All form elements inside the left panel are
+   downsized for the narrow column width.
+   ═══════════════════════════════════════════ */
+.leftPane {
+  font-size: 11px !important;
+}
+
+.leftPane .form {
+  gap: 6px !important;
+}
+
+.leftPane .input,
+.leftPane select,
+.leftPane textarea.input {
+  padding: 5px 7px !important;
+  font-size: 11px !important;
+  border-radius: 6px !important;
+}
+
+.leftPane .cellInput {
+  padding: 5px 7px !important;
+  font-size: 11px !important;
+}
+
+.leftPane button,
+.leftPane .btn,
+.leftPane .btnSmall,
+.leftPane .btnSecondary,
+.leftPane .btnDanger {
+  padding: 5px 10px !important;
+  font-size: 10px !important;
+  border-radius: 6px !important;
+}
+
+.leftPane .label {
+  font-size: 10px !important;
+}
+
+.leftPane .muted,
+.leftPane .mutedSmall,
+.leftPane .hint {
+  font-size: 10px !important;
+}
+
+.leftPane .sectionHeader {
+  font-size: 11px !important;
+  margin-top: 8px !important;
+  margin-bottom: 6px !important;
+}
+
+.leftPane .panelTitle {
+  font-size: 10px !important;
+  margin-bottom: 6px !important;
+}
+
+.leftPane .field {
+  gap: 4px !important;
+}
+
+.leftPane .segmented {
+  border-radius: 6px !important;
+}
+
+.leftPane .segBtn {
+  padding: 5px 8px !important;
+  font-size: 10px !important;
+}
+
+.leftPane .table,
+.leftPane .matrix,
+.leftPane .tableContainer {
+  border-radius: 8px !important;
+}
+
+.leftPane .cell.head,
+.leftPane .cell.rowLabel {
+  padding: 4px 6px !important;
+  font-size: 10px !important;
+}
+
+.leftPane .thead,
+.leftPane .trow {
+  padding: 5px 7px !important;
+  font-size: 10px !important;
+  gap: 6px !important;
+}
+
+.leftPane .editor {
+  font-size: 11px !important;
+  min-height: 350px !important;
+}
+
+.leftPane .toggle,
+.leftPane .toggleTight {
+  font-size: 10px !important;
+  gap: 5px !important;
+}
+
+.leftPane .toggleTight {
+  height: 26px !important;
+  padding: 0 5px !important;
+}
+
+.leftPane .check input {
+  width: 13px !important;
+  height: 13px !important;
+}
+
+.leftPane .mono {
+  font-size: 11px !important;
+}
+
+.leftPane .error,
+.leftPane .warning {
+  font-size: 10px !important;
+  padding: 6px 8px !important;
+}
+
+.leftPane .grid2 {
+  gap: 6px !important;
+}
+
+.leftPane .grid4 {
+  gap: 6px !important;
+}
+
+.leftPane .nameActions {
+  gap: 5px !important;
+}
+
+.leftPane .actionButtons {
+  gap: 5px !important;
+}
+
+.configPrefCard {
+  border: 1px solid var(--color-teal-border);
+  background: rgba(24, 208, 184, 0.08);
+  border-radius: 10px;
+  padding: 14px 14px;
+  margin-bottom: 8px;
+  min-height: 116px;
+}
+
+.btnSmall.btnSubtleAction {
+  background: rgba(19, 30, 52, 0.88) !important;
+  color: var(--color-text-secondary) !important;
+  border: 1px solid var(--color-border-primary) !important;
+}
+
+.btnSmall.btnSubtleAction:hover:not(:disabled) {
+  background: rgba(26, 41, 69, 0.95) !important;
+  color: var(--color-text-primary) !important;
+  border-color: var(--color-teal-border) !important;
+  transform: none !important;
+}
+
+.btnSmall.btnPrimaryAction {
+  background: var(--color-primary) !important;
+  color: var(--color-text-inverse) !important;
+  border: 1px solid var(--color-primary) !important;
+}
+
+.btnSmall.btnPrimaryAction:hover:not(:disabled) {
+  background: var(--color-primary-hover) !important;
+  border-color: var(--color-primary-hover) !important;
+  transform: none !important;
+}
+
+.leftPane .actionButtons .btnSmall.btnSubtleAction {
+  background: rgba(19, 30, 52, 0.88) !important;
+  color: var(--color-text-secondary) !important;
+  border: 1px solid var(--color-border-primary) !important;
+}
+
+.leftPane .actionButtons .btnSmall.btnSubtleAction:hover:not(:disabled) {
+  background: rgba(26, 41, 69, 0.95) !important;
+  color: var(--color-text-primary) !important;
+  border-color: var(--color-teal-border) !important;
+  transform: none !important;
+}
+
+.leftPane .actionButtons .btnSmall.btnPrimaryAction {
+  background: var(--color-primary) !important;
+  color: var(--color-text-inverse) !important;
+  border: 1px solid var(--color-primary) !important;
+}
+
+.leftPane .actionButtons .btnSmall.btnPrimaryAction:hover:not(:disabled) {
+  background: var(--color-primary-hover) !important;
+  border-color: var(--color-primary-hover) !important;
+  transform: none !important;
+}
+
+.leftPane .toggleTight {
+  background: rgba(19, 30, 52, 0.88) !important;
+  border-color: var(--color-border-primary) !important;
+  color: var(--color-text-secondary) !important;
+}
+
+.leftPane .linkBtn {
+  font-size: 10px !important;
+}
+
+/* --------------------------------------------------------------------------
+   Revert simple style for steel interactive controls (overlay/popovers)
+   -------------------------------------------------------------------------- */
+.header .steelLayerSelector {
+  border: 1px solid rgba(255, 255, 255, 0.2) !important;
+  border-radius: 8px !important;
+  background: rgba(2, 6, 23, 0.72) !important;
+  box-shadow: none !important;
+}
+
+.header .steelLayerBtn {
+  background: transparent !important;
+  border: none !important;
+  color: rgba(226, 232, 240, 0.82) !important;
+  padding: 6px 12px !important;
+  font-size: 11px !important;
+  font-weight: 700 !important;
+}
+
+.header .steelLayerBtn:hover {
+  background: rgba(255, 255, 255, 0.08) !important;
+  color: #e2e8f0 !important;
+}
+
+.header .steelLayerBtnActive {
+  background: rgba(20, 184, 166, 0.24) !important;
+  color: #e2e8f0 !important;
+}
+
+.soPopover button,
+.soPopover .soSegBtn,
+.soPopover .soPopoverClose {
+  transform: none !important;
+  box-shadow: none !important;
+}
+
+.soPopover .soSegBtn {
+  background: transparent !important;
+  border: none !important;
+  color: rgba(229, 231, 235, 0.72) !important;
+  padding: 3px 8px !important;
+}
+
+.soPopover .soSegBtn:hover {
+  background: rgba(255, 255, 255, 0.06) !important;
+  color: #e5e7eb !important;
+}
+
+.soPopover .soSegBtnActive {
+  background: rgba(20, 184, 166, 0.22) !important;
+  color: #e5e7eb !important;
+}
+
+.soPopover .soSegmented {
+  border: 1px solid rgba(255, 255, 255, 0.1) !important;
+  border-radius: 6px !important;
+  background: rgba(0, 0, 0, 0.18) !important;
+}
+
+/* --------------------------------------------------------------------------
+   Final tuning: toolbar states (off by default, bright only when active)
+   -------------------------------------------------------------------------- */
+.panelDetail .steelLayerSelector {
+  display: inline-flex !important;
+  flex-shrink: 0 !important;
+  border: 1px solid var(--color-border-primary) !important;
+  border-radius: 8px !important;
+  overflow: hidden !important;
+  background: var(--color-bg-darkest) !important;
+}
+
+.panelDetail .steelLayerBtn {
+  flex: 0 0 auto !important;
+  min-width: 0 !important;
+  padding: 5px 9px !important;
+  font-size: 11px !important;
+  border: none !important;
+  border-right: 1px solid var(--color-border-primary) !important;
+  background: transparent !important;
+  color: var(--color-text-secondary) !important;
+  box-shadow: none !important;
+}
+
+.panelDetail .steelLayerBtn:last-child {
+  border-right: none !important;
+}
+
+.panelDetail .steelLayerBtn:hover {
+  background: rgba(255, 255, 255, 0.06) !important;
+  color: var(--color-text-primary) !important;
+}
+
+.panelDetail .steelLayerBtnActive {
+  background: var(--color-primary) !important;
+  color: var(--color-text-inverse) !important;
+}
+
+.panelDetail .viewerToolbar input[type="checkbox"] {
+  accent-color: var(--color-primary) !important;
 }

@@ -44,50 +44,49 @@
 .soIcon {
   position: absolute;
   pointer-events: auto;
-  width: 22px;
-  height: 22px;
-  border-radius: 50%;
-  border: 1.5px solid rgba(255,255,255,0.18);
-  background: rgba(11,18,32,0.88);
+  width: 32px;
+  height: 20px;
+  border-radius: 999px;
+  border: 1px solid rgba(20,184,166,0.55);
+  background: rgba(20,184,166,0.92);
   display: flex;
   align-items: center;
   justify-content: center;
   cursor: pointer;
-  transition: box-shadow 0.18s, border-color 0.18s, transform 0.12s;
+  transition: background 0.15s, border-color 0.15s;
   z-index: 12;
   font-size: 11px;
   line-height: 1;
-  color: rgba(229,231,235,0.85);
+  color: #042127;
+  font-weight: 700;
 }
 .soIcon:hover {
-  border-color: rgba(20,184,166,0.65);
-  box-shadow: 0 0 8px 2px rgba(20,184,166,0.35);
-  transform: scale(1.15);
-  z-index: 14;
+  border-color: rgba(20,184,166,0.85);
+  background: #2dd4bf;
 }
 .soIconActive {
-  border-color: rgba(250,204,21,0.7);
-  box-shadow: 0 0 10px 3px rgba(250,204,21,0.30);
-  background: rgba(250,204,21,0.12);
+  border-color: rgba(250,204,21,0.85);
+  background: rgba(250,204,21,0.92);
+  color: #1f2937;
   z-index: 15;
 }
 
 /* colour variants per layer */
-.soIcon--acero { color: rgba(250,204,21,0.95); }
+.soIcon--acero { color: #1f2937; }
 .soIcon--acero:hover,
-.soIcon--acero.soIconActive { border-color: rgba(250,204,21,0.7); box-shadow: 0 0 8px 2px rgba(250,204,21,0.3); }
+.soIcon--acero.soIconActive { border-color: rgba(250,204,21,0.85); background: rgba(250,204,21,0.92); }
 
-.soIcon--bastones { color: rgba(34,197,94,0.95); }
+.soIcon--bastones { color: #052e16; }
 .soIcon--bastones:hover,
-.soIcon--bastones.soIconActive { border-color: rgba(34,197,94,0.7); box-shadow: 0 0 8px 2px rgba(34,197,94,0.3); }
+.soIcon--bastones.soIconActive { border-color: rgba(34,197,94,0.8); background: rgba(34,197,94,0.88); }
 
-.soIcon--estribos { color: rgba(168,85,247,0.95); }
+.soIcon--estribos { color: #3b0764; }
 .soIcon--estribos:hover,
-.soIcon--estribos.soIconActive { border-color: rgba(168,85,247,0.7); box-shadow: 0 0 8px 2px rgba(168,85,247,0.3); }
+.soIcon--estribos.soIconActive { border-color: rgba(168,85,247,0.8); background: rgba(168,85,247,0.88); }
 
 /* node icons (smaller, placed at node edges) */
 .soIconNode {
-  width: 18px;
+  width: 26px;
   height: 18px;
   font-size: 9px;
 }
@@ -99,15 +98,14 @@
   z-index: 50;
   min-width: 260px;
   max-width: 380px;
-  background: rgba(15,23,42,0.97);
-  border: 1px solid rgba(255,255,255,0.12);
-  border-radius: 10px;
-  padding: 10px 12px;
-  box-shadow: 0 8px 32px rgba(0,0,0,0.55), 0 0 0 1px rgba(255,255,255,0.04);
-  backdrop-filter: blur(12px);
+  background: rgba(15,23,42,0.98);
+  border: 1px solid rgba(255,255,255,0.15);
+  border-radius: 8px;
+  padding: 8px 10px;
+  box-shadow: 0 6px 18px rgba(0,0,0,0.35);
   color: #e5e7eb;
   font-size: 12px;
-  animation: soFadeIn 0.12s ease-out;
+  animation: soFadeIn 0.1s ease-out;
 }
 
 @keyframes soFadeIn {
@@ -131,18 +129,17 @@
 }
 
 .soPopoverClose {
-  background: none;
-  border: none;
-  color: rgba(229,231,235,0.5);
+  background: rgba(20,184,166,0.16);
+  border: 1px solid rgba(20,184,166,0.4);
+  color: rgba(229,231,235,0.88);
   cursor: pointer;
-  font-size: 16px;
+  font-size: 14px;
   line-height: 1;
-  padding: 2px 4px;
+  padding: 2px 7px;
   border-radius: 4px;
 }
 .soPopoverClose:hover {
-  color: #e5e7eb;
-  background: rgba(255,255,255,0.08);
+  background: rgba(20,184,166,0.28);
 }
 
 /* ---- Popover form elements ---- */

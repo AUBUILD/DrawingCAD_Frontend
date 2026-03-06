@@ -79,14 +79,14 @@ export function computeNodeLabelX(dev: DevelopmentIn, origins: number[], nodeInd
 /**
  * Encuentra el índice del tramo que contiene la coordenada X
  */
-export function spanIndexAtX(dev: DevelopmentIn, x: number) {
+export function spanIndexAtX(dev: DevelopmentIn, x: number): number {
   const origins = computeNodeOrigins(dev);
   const spans = dev.spans ?? [];
   for (let i = 0; i < spans.length; i++) {
     const { x1, x2 } = computeSpanRangeX(dev, origins, i);
     if (x >= x1 && x <= x2) return i;
   }
-  return null;
+  return 0;
 }
 
 /**
@@ -113,7 +113,6 @@ export function nodeIndexAtX(dev: DevelopmentIn, x: number) {
  */
 export function spanBAtX(dev: DevelopmentIn, x: number) {
   const idx = spanIndexAtX(dev, x);
-  if (idx == null) return 0.3;
   const b = clampNumber((dev.spans ?? [])[idx]?.b ?? 0.3, 0.3);
   return b;
 }

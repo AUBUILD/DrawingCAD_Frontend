@@ -25,6 +25,12 @@ interface UseBackendConfigParams {
   setSlabProjOffsetDraft: React.Dispatch<React.SetStateAction<string>>;
   slabProjLayerDraft: string;
   setSlabProjLayerDraft: React.Dispatch<React.SetStateAction<string>>;
+  devTitleYOffsetDraft: string;
+  setDevTitleYOffsetDraft: React.Dispatch<React.SetStateAction<string>>;
+  devSectionTextRowStepDraft: string;
+  setDevSectionTextRowStepDraft: React.Dispatch<React.SetStateAction<string>>;
+  steelLabelOffsetDraft: string;
+  setSteelLabelOffsetDraft: React.Dispatch<React.SetStateAction<string>>;
 }
 
 export function useBackendConfig({
@@ -48,6 +54,12 @@ export function useBackendConfig({
   setSlabProjOffsetDraft,
   slabProjLayerDraft,
   setSlabProjLayerDraft,
+  devTitleYOffsetDraft,
+  setDevTitleYOffsetDraft,
+  devSectionTextRowStepDraft,
+  setDevSectionTextRowStepDraft,
+  steelLabelOffsetDraft,
+  setSteelLabelOffsetDraft,
 }: UseBackendConfigParams) {
 
   // Cargar config global (gancho, etc). Ignora fallos.
@@ -86,6 +98,10 @@ export function useBackendConfig({
     // Proyección de losa
     setSlabProjOffsetDraft(String(backendCfg?.slab_proj_offset_m ?? 0.2));
     setSlabProjLayerDraft(String(backendCfg?.slab_proj_layer ?? ''));
+    // Posición de textos DXF
+    setDevTitleYOffsetDraft(String(backendCfg?.dev_title_y_offset_m ?? 0.4));
+    setDevSectionTextRowStepDraft(String(backendCfg?.dev_section_text_row_step_m ?? 0.16));
+    setSteelLabelOffsetDraft(String(backendCfg?.steel_label_offset_m ?? 0.15));
   }, [
     backendCfg?.steel_text_layer,
     backendCfg?.steel_text_style,
@@ -95,6 +111,9 @@ export function useBackendConfig({
     backendCfg?.steel_text_rotation,
     backendCfg?.slab_proj_offset_m,
     backendCfg?.slab_proj_layer,
+    backendCfg?.dev_title_y_offset_m,
+    backendCfg?.dev_section_text_row_step_m,
+    backendCfg?.steel_label_offset_m,
   ]);
 
   // Autosave (debounced) al modificar L6 gancho en Config.
@@ -183,5 +202,40 @@ export function useBackendConfig({
       const cfg = await updateConfig(patch);
       setBackendCfg(cfg);
     }
+  );
+
+  // Autosave (debounced) al modificar posición de textos DXF.
+  useDebounce(
+    {
+      title: devTitleYOffsetDraft,
+      sectionRow: devSectionTextRowStepDraft,
+      steelLabel: steelLabelOffsetDraft,
+    },
+    500,
+    async (drafts) => {
+      if (!backendCfg) return;
+
+      const parseOr = (v: string, fallback: number) => {
+        const n = Number.parseFloat(String(v ?? '').trim().replace(',', '.'));
+        return Number.isFinite(n) ? Math.max(0, n) : fallback;
+      };
+
+      const currTitle = typeof backendCfg.dev_title_y_offset_m === 'number' ? backendCfg.dev_title_y_offset_m : 0.4;
+      const currSectionRow = typeof backendCfg.dev_section_text_row_step_m === 'number' ? backendCfg.dev_section_text_row_step_m : 0.16;
+      const currSteelLabel = typeof backendCfg.steel_label_offset_m === 'number' ? backendCfg.steel_label_offset_m : 0.15;
+
+      const nextTitle = parseOr(drafts.title, currTitle);
+      const nextSectionRow = parseOr(drafts.sectionRow, currSectionRow);
+      const nextSteelLabel = parseOr(drafts.steelLabel, currSteelLabel);
+
+      const patch: Partial<BackendAppConfig> = {};
+      if (Math.abs(nextTitle - currTitle) > 1e-9) patch.dev_title_y_offset_m = nextTitle;
+      if (Math.abs(nextSectionRow - currSectionRow) > 1e-9) patch.dev_section_text_row_step_m = nextSectionRow;
+      if (Math.abs(nextSteelLabel - currSteelLabel) > 1e-9) patch.steel_label_offset_m = nextSteelLabel;
+      if (!Object.keys(patch).length) return;
+
+      const cfg = await updateConfig(patch);
+      setBackendCfg(cfg);
+    },
   );
 }

@@ -6,7 +6,7 @@ import { PopoverShell } from './PopoverShell';
 // ============================================================================
 // Constants
 // ============================================================================
-const DIAMETERS = ['3/8', '1/2', '5/8', '3/4'];
+const DIAMETERS = ['8mm', '3/8', '1/2', '5/8', '3/4'];
 const CASE_TYPES: Array<{ value: StirrupsCaseType; label: string }> = [
   { value: 'simetrica', label: 'Simétrica' },
   { value: 'asim_ambos', label: 'Asim. Ambos' },
@@ -41,11 +41,11 @@ export const EstribosPopover: React.FC<Props> = ({
 
   const caseType = dist.case_type ?? 'simetrica';
   const designMode = (dist.design_mode ?? 'sismico') as 'sismico' | 'gravedad';
-  const diameter = dist.diameter ?? '3/8';
+  const diameter = dist.diameter ?? '8mm';
   const singleEnd = dist.single_end ?? 'left';
 
   // Section
-  const secDia = sec.diameter ?? '3/8';
+  const secDia = sec.diameter ?? '8mm';
   const secQty = sec.qty ?? 1;
 
   // Spec strings (one per zone)

@@ -1,8 +1,7 @@
 import { useEffect, useRef } from 'react';
 import * as THREE from 'three';
-import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
-import type { DevelopmentIn, PreviewResponse, BastonCfg, SpanIn, NodeIn } from '../types';
-import type { Selection, Bounds, PolyPt } from '../services';
+import type { BastonCfg, SpanIn, NodeIn } from '../types';
+import type { PolyPt } from '../services';
 import {
   mToUnits,
   computeNodeOrigins,
@@ -12,65 +11,29 @@ import {
   spanBAtX,
   uniqueSortedNumbers,
   polySliceIntervals,
-  abcrFromLegacyTokens,
-  stirrupsPositionsFromTokens,
   stirrupsBlocksFromSpec,
   stirrupsRestSpacingFromSpec,
   lengthFromTableMeters,
-  computeNodeMarkerX,
-  computeSpanMidX,
   setEmissiveOnObject,
   disposeObject3D,
   setOrthoFrustum,
   fitCameraToObject,
-  canvasMapper,
   normalizeBastonCfg,
   normalizeStirrupsSection,
   nodeSteelKind,
   nodeToFaceEnabled,
   nodeBastonLineKind,
   nodeBastonLineToFaceEnabled,
-  type StirrupBlock,
 } from '../services';
 import {
   computeSpanSectionLayoutWithBastonesCm,
   diameterToCm,
   getSteelLayoutSettings,
 } from '../steelLayout';
-import type { AppConfig } from '../services';
 import { clampNumber, normalizeDiaKey, snap05m } from '../utils';
-
-type ThreeProjection = 'perspective' | 'orthographic';
-
-interface ThreeSceneState {
-  renderer: THREE.WebGLRenderer;
-  scene: THREE.Scene;
-  camera: THREE.PerspectiveCamera | THREE.OrthographicCamera;
-  perspCamera: THREE.PerspectiveCamera;
-  orthoCamera: THREE.OrthographicCamera;
-  controls: OrbitControls;
-  root: THREE.Group;
-  spans: THREE.Group[];
-  nodes: THREE.Group[];
-  spanSteel: THREE.Group[];
-  spanStirrups: THREE.Group[];
-  nodeSteel: THREE.Group[];
-  nodeStirrups: THREE.Group[];
-}
-
-interface UseThreeSceneParams {
-  previewView: '2d' | '3d';
-  preview: PreviewResponse | null;
-  dev: DevelopmentIn;
-  appCfg: AppConfig;
-  selection: Selection;
-  threeOpacity: number;
-  zoomEnabled: boolean;
-  showLongitudinal: boolean;
-  showStirrups: boolean;
-  hookLegM: number;
-  threeProjection: ThreeProjection;
-}
+import type { ThreeSceneState, UseThreeSceneParams } from './threeScene.types';
+import { createThreeScene } from './createThreeScene';
+import { addXSegmentTo, addYSegmentTo, addArbitrarySegmentTo, createConcreteMaterial, createSteelMaterials, createStirrupMaterials } from './threeGeometryHelpers';
 
 export function useThreeScene({
   previewView,
@@ -81,6 +44,7 @@ export function useThreeScene({
   threeOpacity,
   zoomEnabled,
   showLongitudinal,
+  showBastones,
   showStirrups,
   hookLegM,
   threeProjection,
@@ -97,125 +61,13 @@ export function useThreeScene({
     if (!host) return;
     if (threeRef.current) return;
 
-    const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
-    renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
-    renderer.setClearColor(0x000000, 0);
-    renderer.outputColorSpace = THREE.SRGBColorSpace;
-    renderer.toneMapping = THREE.ACESFilmicToneMapping;
-    renderer.toneMappingExposure = 1.0;
-    (renderer as any).physicallyCorrectLights = true;
+    const { state, cleanup } = createThreeScene(host, threeRef, {
+      projection: threeProjection,
+      interactive: true,
+    });
+    threeRef.current = state;
 
-    const scene = new THREE.Scene();
-
-    const perspCamera = new THREE.PerspectiveCamera(45, 1, 0.01, 5000);
-    perspCamera.position.set(120, 80, 120);
-
-    const orthoCamera = new THREE.OrthographicCamera(-100, 100, 100, -100, 0.01, 5000);
-    orthoCamera.position.set(120, 80, 120);
-
-    const camera = threeProjection === 'orthographic' ? orthoCamera : perspCamera;
-
-    const controls = new OrbitControls(camera, renderer.domElement);
-    controls.enableDamping = true;
-    controls.dampingFactor = 0.09;
-    controls.rotateSpeed = 0.65;
-    controls.zoomSpeed = 1.15;
-    controls.panSpeed = 1.05;
-    controls.screenSpacePanning = true;
-    controls.zoomToCursor = true;
-    controls.minPolarAngle = 0.05;
-    controls.maxPolarAngle = Math.PI - 0.05;
-    // Navegación 3D más fluida: zoom con wheel, pan con botón medio (y también con derecho), rotación con izquierdo.
-    // Esto suele sentirse más cercano a CAD/BIM en práctica.
-    controls.mouseButtons = {
-      LEFT: THREE.MOUSE.ROTATE,
-      MIDDLE: THREE.MOUSE.PAN,
-      RIGHT: THREE.MOUSE.PAN,
-    } as any;
-
-    const hemi = new THREE.HemisphereLight(0xffffff, 0xffffff, 0.45);
-    scene.add(hemi);
-    const ambient = new THREE.AmbientLight(0xffffff, 0.35);
-    scene.add(ambient);
-    const key = new THREE.DirectionalLight(0xffffff, 0.95);
-    key.position.set(200, 250, 120);
-    scene.add(key);
-    const fill = new THREE.DirectionalLight(0xffffff, 0.35);
-    fill.position.set(-220, 140, -180);
-    scene.add(fill);
-
-    const root = new THREE.Group();
-    scene.add(root);
-
-    host.appendChild(renderer.domElement);
-
-    const onDblClick = () => {
-      // Reset rápido para volver a encuadrar.
-      const rect = host.getBoundingClientRect();
-      fitCameraToObject(
-        (threeRef.current?.camera ?? camera) as any,
-        controls,
-        root,
-        { w: Math.max(1, Math.round(rect.width)), h: Math.max(1, Math.round(rect.height)) }
-      );
-    };
-    renderer.domElement.addEventListener('dblclick', onDblClick);
-
-    const onResize = () => {
-      const rect = host.getBoundingClientRect();
-      const w = Math.max(1, Math.round(rect.width));
-      const h = Math.max(1, Math.round(rect.height));
-      renderer.setSize(w, h, false);
-      const s = threeRef.current;
-      const cam = (s?.camera ?? camera) as any;
-      if (cam?.isPerspectiveCamera) {
-        cam.aspect = w / h;
-        cam.updateProjectionMatrix();
-      } else if (cam?.isOrthographicCamera) {
-        setOrthoFrustum(cam as THREE.OrthographicCamera, w / h);
-        cam.updateProjectionMatrix();
-      }
-    };
-
-    const ro = new ResizeObserver(onResize);
-    ro.observe(host);
-    onResize();
-
-    let raf = 0;
-    const tick = () => {
-      const s = threeRef.current;
-      if (!s) return;
-      s.controls.update();
-      s.renderer.render(s.scene, s.camera);
-      raf = window.requestAnimationFrame(tick);
-    };
-    raf = window.requestAnimationFrame(tick);
-
-    threeRef.current = {
-      renderer,
-      scene,
-      camera,
-      perspCamera,
-      orthoCamera,
-      controls,
-      root,
-      spans: [],
-      nodes: [],
-      spanSteel: [],
-      spanStirrups: [],
-      nodeSteel: [],
-      nodeStirrups: [],
-    };
-
-    return () => {
-      window.cancelAnimationFrame(raf);
-      ro.disconnect();
-      renderer.domElement.removeEventListener('dblclick', onDblClick);
-      disposeObject3D(root);
-      renderer.dispose();
-      renderer.domElement.remove();
-      threeRef.current = null;
-    };
+    return cleanup;
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [previewView]);
 
@@ -226,100 +78,13 @@ export function useThreeScene({
     if (!host) return;
     if (threeOverviewRef.current) return;
 
-    const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
-    renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
-    renderer.setClearColor(0x000000, 0);
-    renderer.outputColorSpace = THREE.SRGBColorSpace;
-    renderer.toneMapping = THREE.ACESFilmicToneMapping;
-    renderer.toneMappingExposure = 1.0;
-    (renderer as any).physicallyCorrectLights = true;
+    const { state, cleanup } = createThreeScene(host, threeOverviewRef, {
+      projection: threeProjection,
+      interactive: false,
+    });
+    threeOverviewRef.current = state;
 
-    const scene = new THREE.Scene();
-
-    const perspCamera = new THREE.PerspectiveCamera(45, 1, 0.01, 5000);
-    perspCamera.position.set(120, 80, 120);
-
-    const orthoCamera = new THREE.OrthographicCamera(-100, 100, 100, -100, 0.01, 5000);
-    orthoCamera.position.set(120, 80, 120);
-
-    const camera = threeProjection === 'orthographic' ? orthoCamera : perspCamera;
-
-    const controls = new OrbitControls(camera, renderer.domElement);
-    controls.enableDamping = false;
-    controls.enableRotate = false;
-    controls.enableZoom = false;
-    controls.enablePan = false;
-
-    const hemi = new THREE.HemisphereLight(0xffffff, 0xffffff, 0.45);
-    scene.add(hemi);
-    const ambient = new THREE.AmbientLight(0xffffff, 0.35);
-    scene.add(ambient);
-    const key = new THREE.DirectionalLight(0xffffff, 0.95);
-    key.position.set(200, 250, 120);
-    scene.add(key);
-    const fill = new THREE.DirectionalLight(0xffffff, 0.35);
-    fill.position.set(-220, 140, -180);
-    scene.add(fill);
-
-    const root = new THREE.Group();
-    scene.add(root);
-
-    host.appendChild(renderer.domElement);
-
-    const onResize = () => {
-      const rect = host.getBoundingClientRect();
-      const w = Math.max(1, Math.round(rect.width));
-      const h = Math.max(1, Math.round(rect.height));
-      renderer.setSize(w, h, false);
-      const s = threeOverviewRef.current;
-      const cam = (s?.camera ?? camera) as any;
-      if (cam?.isPerspectiveCamera) {
-        cam.aspect = w / h;
-        cam.updateProjectionMatrix();
-      } else if (cam?.isOrthographicCamera) {
-        setOrthoFrustum(cam as THREE.OrthographicCamera, w / h);
-        cam.updateProjectionMatrix();
-      }
-    };
-
-    const ro = new ResizeObserver(onResize);
-    ro.observe(host);
-    onResize();
-
-    let raf = 0;
-    const tick = () => {
-      const s = threeOverviewRef.current;
-      if (!s) return;
-      s.controls.update();
-      s.renderer.render(s.scene, s.camera);
-      raf = window.requestAnimationFrame(tick);
-    };
-    raf = window.requestAnimationFrame(tick);
-
-    threeOverviewRef.current = {
-      renderer,
-      scene,
-      camera,
-      perspCamera,
-      orthoCamera,
-      controls,
-      root,
-      spans: [],
-      nodes: [],
-      spanSteel: [],
-      spanStirrups: [],
-      nodeSteel: [],
-      nodeStirrups: [],
-    };
-
-    return () => {
-      window.cancelAnimationFrame(raf);
-      ro.disconnect();
-      disposeObject3D(root);
-      renderer.dispose();
-      renderer.domElement.remove();
-      threeOverviewRef.current = null;
-    };
+    return cleanup;
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [previewView]);
 
@@ -449,14 +214,7 @@ export function useThreeScene({
     state.nodeSteel = nodeSteelGroups;
     state.nodeStirrups = nodeStirrupsGroups;
 
-    // Concreto semi-transparente para visualizar acero interno.
-    const baseMat = new THREE.MeshStandardMaterial({
-      color: 0x14b8a6,
-      roughness: 0.48,
-      metalness: 0.05,
-      transparent: true,
-      opacity: 0.20,
-    });
+    const baseMat = createConcreteMaterial();
 
     // Rebanadas entre cada borde vertical del polígono.
     for (let i = 0; i + 1 < xs.length; i++) {
@@ -530,10 +288,11 @@ export function useThreeScene({
     // Acero longitudinal (simplificado): barras rectas por tramo según layout de sección.
     // Incluye bastones como segmentos por zonas (Z1/Z2/Z3).
     try {
-      const steelMat = new THREE.MeshStandardMaterial({ color: 0xfacc15, roughness: 0.35, metalness: 0.25 });
-      const bastonL1Mat = new THREE.MeshStandardMaterial({ color: 0x22c55e, roughness: 0.40, metalness: 0.15 });
-      const bastonL2Mat = new THREE.MeshStandardMaterial({ color: 0x06b6d4, roughness: 0.40, metalness: 0.15 });
-      const extraMat = new THREE.MeshStandardMaterial({ color: 0xd946ef, roughness: 0.45, metalness: 0.10 });
+      const steelMats = createSteelMaterials();
+      const steelMat = steelMats.main;
+      const bastonL1Mat = steelMats.bastonL1;
+      const bastonL2Mat = steelMats.bastonL2;
+      const extraMat = steelMats.extra;
       const origins = computeNodeOrigins(dev);
       const yBaseU = mToUnits(dev, clampNumber((dev as any).y0 ?? 0, 0));
       const coverM = clampNumber((dev as any).recubrimiento ?? appCfg.recubrimiento ?? 0.04, 0.04);
@@ -543,76 +302,8 @@ export function useThreeScene({
       const coverU = mToUnits(dev, coverM);
       const hookLegU = mToUnits(dev, clampNumber(hookLegM, 0.15));
 
-      const addXSegmentTo = (
-        parent: THREE.Object3D,
-        xa: number,
-        xb: number,
-        yU: number,
-        zU: number,
-        radiusU: number,
-        mat: THREE.Material
-      ) => {
-        const lo = Math.min(xa, xb);
-        const hi = Math.max(xa, xb);
-        const Lx = hi - lo;
-        if (!(Lx > 1e-6)) return;
-        if (!(radiusU > 0)) return;
-        const geom = new THREE.CylinderGeometry(radiusU, radiusU, Lx, 12);
-        geom.rotateZ(Math.PI / 2);
-        const mesh = new THREE.Mesh(geom, mat);
-        mesh.position.set((lo + hi) / 2, yU, zU);
-        parent.add(mesh);
-      };
-
-      const addYSegmentTo = (
-        parent: THREE.Object3D,
-        xU: number,
-        y0U: number,
-        y1U: number,
-        zU: number,
-        radiusU: number,
-        mat: THREE.Material
-      ) => {
-        const lo = Math.min(y0U, y1U);
-        const hi = Math.max(y0U, y1U);
-        const Ly = hi - lo;
-        if (!(Ly > 1e-6)) return;
-        if (!(radiusU > 0)) return;
-        const geom = new THREE.CylinderGeometry(radiusU, radiusU, Ly, 12);
-        const mesh = new THREE.Mesh(geom, mat);
-        mesh.position.set(xU, (lo + hi) / 2, zU);
-        parent.add(mesh);
-      };
-
-      const addSegmentTo = (
-        parent: THREE.Object3D,
-        x0: number,
-        y0: number,
-        z0: number,
-        x1: number,
-        y1: number,
-        z1: number,
-        radiusU: number,
-        mat: THREE.Material
-      ) => {
-        const dx = x1 - x0;
-        const dy = y1 - y0;
-        const dz = z1 - z0;
-        const L = Math.hypot(dx, dy, dz);
-        if (!(L > 1e-6)) return;
-        if (!(radiusU > 0)) return;
-
-        const geom = new THREE.CylinderGeometry(radiusU, radiusU, L, 12);
-        const mesh = new THREE.Mesh(geom, mat);
-
-        // CylinderGeometry is aligned with +Y by default.
-        const dir = new THREE.Vector3(dx, dy, dz).normalize();
-        const q = new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(0, 1, 0), dir);
-        mesh.quaternion.copy(q);
-
-        mesh.position.set((x0 + x1) / 2, (y0 + y1) / 2, (z0 + z1) / 2);
-        parent.add(mesh);
-      };
+      // Segment helpers imported from threeGeometryHelpers
+      const addSegmentTo = addArbitrarySegmentTo;
 
       const resolvedLenMWithLm = (cfg: BastonCfg, field: 'L1_m' | 'L2_m' | 'L3_m', fallbackM: number, Lm: number) => {
         const v = (cfg as any)[field];
@@ -666,30 +357,11 @@ export function useThreeScene({
           return Math.min(Lm, Math.max(0, snapped));
         };
 
-        const addXSegment = (xa: number, xb: number, yU: number, zU: number, radiusU: number, mat: THREE.Material) => {
-          const lo = Math.min(xa, xb);
-          const hi = Math.max(xa, xb);
-          const Lx = hi - lo;
-          if (!(Lx > 1e-6)) return;
-          if (!(radiusU > 0)) return;
-          const geom = new THREE.CylinderGeometry(radiusU, radiusU, Lx, 12);
-          geom.rotateZ(Math.PI / 2);
-          const mesh = new THREE.Mesh(geom, mat);
-          mesh.position.set((lo + hi) / 2, yU, zU);
-          parentSteel.add(mesh);
-        };
+        const addXSegment = (xa: number, xb: number, yU: number, zU: number, radiusU: number, mat: THREE.Material) =>
+          addXSegmentTo(parentSteel, xa, xb, yU, zU, radiusU, mat);
 
-        const addYSegment = (xU: number, y0U: number, y1U: number, zU: number, radiusU: number, mat: THREE.Material) => {
-          const lo = Math.min(y0U, y1U);
-          const hi = Math.max(y0U, y1U);
-          const Ly = hi - lo;
-          if (!(Ly > 1e-6)) return;
-          if (!(radiusU > 0)) return;
-          const geom = new THREE.CylinderGeometry(radiusU, radiusU, Ly, 12);
-          const mesh = new THREE.Mesh(geom, mat);
-          mesh.position.set(xU, (lo + hi) / 2, zU);
-          parentSteel.add(mesh);
-        };
+        const addYSegment = (xU: number, y0U: number, y1U: number, zU: number, radiusU: number, mat: THREE.Material) =>
+          addYSegmentTo(parentSteel, xU, y0U, y1U, zU, radiusU, mat);
 
         const computeEndX2 = (
           xU: number,
@@ -779,6 +451,7 @@ export function useThreeScene({
           }
 
           // Bastones: segmentos por zonas.
+          if (!showBastones) return;
           const l1Pool = (res as any).baston_l1_bars_cm ?? [];
           const l2Pool = (res as any).baston_l2_bars_cm ?? [];
           if (!((l1Pool.length + l2Pool.length) > 0) || !(res.baston_db_cm > 0)) return;
@@ -1051,10 +724,11 @@ export function useThreeScene({
               }
 
               if (leftBlocks.length || rightBlocks.length) {
-                const matB = new THREE.MeshStandardMaterial({ color: 0x22c55e, roughness: 0.55, metalness: 0.05 });
-                const matC = new THREE.MeshStandardMaterial({ color: 0x94a3b8, roughness: 0.55, metalness: 0.05 });
-                const matR = new THREE.MeshStandardMaterial({ color: 0x06b6d4, roughness: 0.55, metalness: 0.05 });
-                const matMid = new THREE.MeshStandardMaterial({ color: 0xd946ef, roughness: 0.55, metalness: 0.05 });
+                const stirrupMats = createStirrupMaterials();
+                const matB = stirrupMats.b;
+                const matC = stirrupMats.c;
+                const matR = stirrupMats.r;
+                const matMid = stirrupMats.mid;
                 const mats = [matB, matC, matR];
 
                 const matFor = (key: string, idx: number) => {
@@ -1068,7 +742,7 @@ export function useThreeScene({
 
                 const sec = normalizeStirrupsSection((span as any).stirrups_section ?? (span as any).stirrupsSection);
                 const settings = getSteelLayoutSettings(dev);
-                const diaKey = normalizeDiaKey(String(st.diameter ?? '3/8').replace(/[∅Ø\s]/g, '')) || '3/8';
+                const diaKey = normalizeDiaKey(String(st.diameter ?? '8mm').replace(/[∅Ø\s]/g, '')) || '8mm';
                 const dbCm = diameterToCm(diaKey, settings);
                 const dbU = mToUnits(dev, dbCm / 100);
                 const hU = mToUnits(dev, clampNumber(span.h ?? 0, 0));
@@ -1182,6 +856,7 @@ export function useThreeScene({
           }
 
           // 2) Bastones continuos en nodo interno: Z3 (izq) ↔ Z1 (der)
+          if (!showBastones) continue;
           const cfgL = getBastonCfgForSpan(leftSpan, face, 'z3');
           const cfgR = getBastonCfgForSpan(rightSpan, face, 'z1');
           const q1L = Math.max(1, Math.min(3, Math.round(cfgL.l1_qty ?? 1)));
@@ -1283,7 +958,7 @@ export function useThreeScene({
       const viewport = rect ? { w: Math.max(1, Math.round(rect.width)), h: Math.max(1, Math.round(rect.height)) } : undefined;
       fitCameraToObject(state.camera, state.controls, state.root, viewport);
     }
-  }, [dev, preview, previewView]);
+  }, [dev, preview, previewView, showBastones]);
 
   // Mantener 3D overview sincronizado (clon del root del detalle)
   useEffect(() => {
@@ -1318,7 +993,7 @@ export function useThreeScene({
     const rect = host.getBoundingClientRect();
     const viewport = { w: Math.max(1, Math.round(rect.width)), h: Math.max(1, Math.round(rect.height)) };
     fitCameraToObject(dst.camera, dst.controls, dst.root, viewport);
-  }, [dev, preview, previewView, showLongitudinal, showStirrups]);
+  }, [dev, preview, previewView, showLongitudinal, showStirrups, showBastones]);
 
   // Togglear visibilidad de capas 3D (sin reconstruir)
   useEffect(() => {

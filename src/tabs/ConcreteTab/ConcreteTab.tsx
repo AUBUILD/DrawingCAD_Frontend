@@ -1,9 +1,7 @@
-import React, { useRef } from 'react';
+import React from 'react';
 import type { DevelopmentIn, SpanIn, NodeIn } from '../../types';
 import type { Selection } from '../../hooks/useSelection';
 import { EditableCell } from './EditableCell';
-
-type LevelType = 'piso' | 'sotano' | 'azotea';
 
 /**
  * Props para ConcreteTab
@@ -19,21 +17,16 @@ export interface ConcreteTabProps {
   busy: boolean;
   concretoLocked: boolean;
   showNT: boolean;
-  batchImportOrder: 'name' | 'location';
 
   // State setters
   setConcretoLocked: (locked: boolean) => void;
   setShowNT: (show: boolean) => void;
-  setBatchImportOrder: React.Dispatch<React.SetStateAction<'name' | 'location'>>;
 
   // Actions
   clearDevelopment: () => void;
-  onImportDxfFile: (file: File) => void;
-  onImportDxfBatchFile: (file: File) => void;
   onSave: () => void;
   addSpan: () => void;
   removeSpan: (index: number) => void;
-  updateDevPatch: (patch: Partial<DevelopmentIn>) => void;
   updateSpan: (index: number, patch: Partial<SpanIn>) => void;
   updateNode: (index: number, patch: Partial<NodeIn>) => void;
   applySelection: (sel: Selection, nextViewport: boolean) => void;
@@ -47,8 +40,6 @@ export interface ConcreteTabProps {
   ) => void;
 
   // Helper functions
-  formatOrdinalEs: (n: number) => string;
-  clampInt: (val: string | number, fallback: number) => number;
   clampNumber: (val: string | number, fallback: number) => number;
   fmt2: (n: number) => string;
 }
@@ -70,73 +61,32 @@ const ConcreteTabInner: React.FC<ConcreteTabProps> = ({
   busy,
   concretoLocked,
   showNT,
-  batchImportOrder,
   setConcretoLocked,
   setShowNT,
-  setBatchImportOrder,
   clearDevelopment,
-  onImportDxfFile,
-  onImportDxfBatchFile,
   onSave,
   addSpan,
   removeSpan,
-  updateDevPatch,
   updateSpan,
   updateNode,
   applySelection,
   onGridKeyDown,
-  formatOrdinalEs,
-  clampInt,
   clampNumber,
   fmt2,
 }) => {
-  const dxfInputRef = useRef<HTMLInputElement | null>(null);
-  const batchDxfInputRef = useRef<HTMLInputElement | null>(null);
-
   return (
     <div className="form">
       <div className="actionRow">
         <div className="mutedSmall">Acciones</div>
         <div className="actionButtons">
-          <button
-            className="btnSmall"
-            type="button"
-            onClick={() => dxfInputRef.current?.click()}
-            disabled={busy}
-            title="Importar DXF (una viga)"
-          >
-            Importa DXF
-          </button>
-          <button
-            className="btnSmall"
-            type="button"
-            onClick={() => batchDxfInputRef.current?.click()}
-            disabled={busy}
-            title="Importar DXF con multiples vigas"
-          >
-            Batch DXF
-          </button>
-          <label className="field" style={{ minWidth: 170, marginBottom: 0 }}>
-            <div className="label">Orden batch</div>
-            <select
-              className="input"
-              value={batchImportOrder}
-              disabled={busy}
-              onChange={(e) => setBatchImportOrder(e.target.value as 'name' | 'location')}
-              title="Criterio de orden para importación múltiple"
-            >
-              <option value="name">Por nombre</option>
-              <option value="location">Por ubicación (arriba→abajo, izq→der)</option>
-            </select>
-          </label>
-          <button className="btnSmall" type="button" onClick={clearDevelopment} disabled={busy} title="Reiniciar el desarrollo">
+          <button className="btnSmall btnSubtleAction" type="button" onClick={clearDevelopment} disabled={busy} title="Reiniciar el desarrollo">
             Limpiar
           </button>
-          <button className="btnSmall" type="button" onClick={addSpan} disabled={concretoLocked}>
-            Añadir Tramo
+          <button className="btnSmall btnSubtleAction" type="button" onClick={addSpan} disabled={concretoLocked}>
+            Añadir tramo
           </button>
-          <button className="btnSmall" type="button" onClick={onSave} disabled={busy} title="Guardar viga actual">
-            💾 Guardar
+          <button className="btnSmall btnPrimaryAction" type="button" onClick={onSave} disabled={busy} title="Guardar viga actual">
+            Guardar
           </button>
           <label className="toggle toggleTight" title={concretoLocked ? 'Edición bloqueada' : 'Edición habilitada'}>
             <input type="checkbox" checked={concretoLocked} onChange={(e) => setConcretoLocked(e.target.checked)} />
@@ -146,109 +96,9 @@ const ConcreteTabInner: React.FC<ConcreteTabProps> = ({
             <input type="checkbox" checked={showNT} onChange={(e) => setShowNT(e.target.checked)} />
             <span>N/T</span>
           </label>
-          <input
-            ref={dxfInputRef}
-            type="file"
-            accept=".dxf"
-            style={{ display: 'none' }}
-            onChange={(e) => {
-              const f = e.target.files?.[0];
-              e.target.value = '';
-              if (f) onImportDxfFile(f);
-            }}
-          />
-          <input
-            ref={batchDxfInputRef}
-            type="file"
-            accept=".dxf"
-            style={{ display: 'none' }}
-            onChange={(e) => {
-              const f = e.target.files?.[0];
-              e.target.value = '';
-              if (f) onImportDxfBatchFile(f);
-            }}
-          />
         </div>
       </div>
 
-      {(() => {
-        const levelType = (((dev as any).level_type ?? 'piso') as string).toLowerCase() as LevelType;
-        const pisos = Array.from({ length: 30 }, (_, i) => formatOrdinalEs(i + 1));
-        return (
-          <>
-            {/* Fila 1: Nombre + Número */}
-            <div className="rowBetween">
-              <label className="field" style={{ flex: '1 1 auto', minWidth: '150px' }}>
-                <div className="label">Nombre</div>
-                <input className="input" value={dev.name ?? ''} readOnly={true} />
-              </label>
-              <label className="field" style={{ flex: '1 1 auto', minWidth: '100px', maxWidth: '150px' }}>
-                <div className="label">Número</div>
-                <input
-                  className="input"
-                  type="number"
-                  min={1}
-                  step={1}
-                  value={String((dev as any).beam_no ?? 1)}
-                  disabled={concretoLocked}
-                  onChange={(e) => updateDevPatch({ beam_no: clampInt(e.target.value, (dev as any).beam_no ?? 1) } as any)}
-                />
-              </label>
-            </div>
-
-            {/* Fila 2: Tipo + Piso inicial + Piso final */}
-            <div className="rowBetween">
-              <label className="field" style={{ flex: '1 1 auto', minWidth: '100px' }}>
-                <div className="label">Tipo</div>
-                <select
-                  className="input"
-                  value={levelType}
-                  disabled={concretoLocked}
-                  onChange={(e) => updateDevPatch({ level_type: e.target.value as any } as any)}
-                >
-                  <option value="sotano">Sótano</option>
-                  <option value="piso">Piso</option>
-                  <option value="azotea">Azotea</option>
-                </select>
-              </label>
-              {levelType !== 'azotea' ? (
-                <>
-                  <label className="field" style={{ flex: '1 1 auto', minWidth: '110px' }}>
-                    <div className="label">Piso inicial</div>
-                    <select
-                      className="input"
-                      value={(dev as any).floor_start ?? '6to'}
-                      disabled={concretoLocked}
-                      onChange={(e) => updateDevPatch({ floor_start: e.target.value } as any)}
-                    >
-                      {pisos.map((p) => (
-                        <option key={`fs-${p}`} value={p}>
-                          {p}
-                        </option>
-                      ))}
-                    </select>
-                  </label>
-                  <label className="field" style={{ flex: '1 1 auto', minWidth: '110px' }}>
-                    <div className="label">Piso final</div>
-                    <select
-                      className="input"
-                      value={(dev as any).floor_end ?? '9no'}
-                      disabled={concretoLocked}
-                      onChange={(e) => updateDevPatch({ floor_end: e.target.value } as any)}
-                    >
-                      {pisos.map((p) => (
-                        <option key={`fe-${p}`} value={p}>
-                          {p}
-                        </option>
-                      ))}
-                    </select>
-                  </label>
-                </>
-              ) : null}
-            </div>
-          </>
-        );
-      })()}
 
       <div>
         <div className="sectionHeader">
@@ -262,9 +112,9 @@ const ConcreteTabInner: React.FC<ConcreteTabProps> = ({
               {(dev.spans ?? []).map((_, i) => (
                 <div className={selection.kind === 'span' && selection.index === i ? 'cell head cellSelected' : 'cell head'} key={`span-head-${i}`}>
                   <div className="colHead">
-                    <div className="mono">Tramo {i + 1}</div>
+                    <div className="mono">{`T${i + 1}`}</div>
                     <button className="btnX" type="button" title="Quitar tramo" onClick={() => removeSpan(i)} disabled={concretoLocked}>
-                      ✕
+                      X
                     </button>
                   </div>
                 </div>
@@ -343,11 +193,11 @@ const ConcreteTabInner: React.FC<ConcreteTabProps> = ({
               <div className="cell head rowLabel"></div>
               {(dev.nodes ?? []).map((_, i) => (
                 <div className={selection.kind === 'node' && selection.index === i ? 'cell head cellSelected' : 'cell head'} key={`node-head-${i}`}>
-                  <div className="mono">Nodo {i + 1}</div>
+                  <div className="mono">{`N${i + 1}`}</div>
                 </div>
               ))}
 
-              <div className="cell rowLabel">X1 superior (b1)</div>
+              <div className="cell rowLabel">b1 sup</div>
               {(dev.nodes ?? []).map((n, i) => (
                 <div className={selection.kind === 'node' && selection.index === i ? 'cell cellSelected' : 'cell'} key={`node-b1-${i}`}>
                   <EditableCell
@@ -366,7 +216,7 @@ const ConcreteTabInner: React.FC<ConcreteTabProps> = ({
                 </div>
               ))}
 
-              <div className="cell rowLabel">X2 superior (b2)</div>
+              <div className="cell rowLabel">b2 sup</div>
               {(dev.nodes ?? []).map((n, i) => (
                 <div className={selection.kind === 'node' && selection.index === i ? 'cell cellSelected' : 'cell'} key={`node-b2-${i}`}>
                   <EditableCell
@@ -385,7 +235,7 @@ const ConcreteTabInner: React.FC<ConcreteTabProps> = ({
                 </div>
               ))}
 
-              <div className="cell rowLabel">proj Superior</div>
+              <div className="cell rowLabel">proj sup</div>
               {(dev.nodes ?? []).map((n, i) => (
                 <div className={selection.kind === 'node' && selection.index === i ? 'cell cellSelected' : 'cell'} key={`node-pb-${i}`}>
                   <label className="check">
@@ -404,7 +254,7 @@ const ConcreteTabInner: React.FC<ConcreteTabProps> = ({
                 </div>
               ))}
 
-              <div className="cell rowLabel">X2 inferior (a2)</div>
+              <div className="cell rowLabel">a2 inf</div>
               {(dev.nodes ?? []).map((n, i) => (
                 <div className={selection.kind === 'node' && selection.index === i ? 'cell cellSelected' : 'cell'} key={`node-a2-${i}`}>
                   <EditableCell
@@ -423,7 +273,7 @@ const ConcreteTabInner: React.FC<ConcreteTabProps> = ({
                 </div>
               ))}
 
-              <div className="cell rowLabel">proj Inferior</div>
+              <div className="cell rowLabel">proj inf</div>
               {(dev.nodes ?? []).map((n, i) => (
                 <div className={selection.kind === 'node' && selection.index === i ? 'cell cellSelected' : 'cell'} key={`node-pa-${i}`}>
                   <label className="check">
@@ -452,3 +302,4 @@ const ConcreteTabInner: React.FC<ConcreteTabProps> = ({
 };
 
 export const ConcreteTab = React.memo(ConcreteTabInner);
+

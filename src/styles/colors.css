@@ -1,0 +1,40 @@
+:root {
+  /* Primary palette — aligned with design tokens (C object in tokens.ts) */
+  --color-primary: #00c9a7;
+  --color-primary-hover: #00a589;
+
+  --color-secondary: #6c8cf5;
+  --color-secondary-hover: #5a7ae0;
+
+  --color-accent: #ff4d6a;
+  --color-accent-hover: #e0405c;
+
+  --color-orange: #f5a623;
+
+  /* Surfaces — dark theme */
+  --color-bg-darkest: #0e1320;
+  --color-bg-page: #0e1320;
+  --color-bg-card: #1e2740;
+  --color-bg-soft: #161d2e;
+
+  /* Text */
+  --color-text-primary: #dde4f0;
+  --color-text-secondary: #8d9bb8;
+  --color-text-inverse: #0e1320;
+  --color-text-dim: #4a5470;
+
+  /* Borders */
+  --color-border-primary: #283252;
+  --color-border-soft: rgba(0, 201, 167, 0.15);
+  --color-border-focus: var(--color-primary);
+
+  /* Teal accents */
+  --color-teal-bg: rgba(0, 201, 167, 0.08);
+  --color-teal-border: rgba(0, 201, 167, 0.25);
+
+  /* Shadows */
+  --shadow-lg: 0 10px 15px -3px rgb(0 0 0 / 0.3), 0 4px 6px -4px rgb(0 0 0 / 0.2);
+  --shadow-card: 0 2px 8px 0 rgba(0, 0, 0, 0.2);
+
+  --transition-fast: 150ms ease-in-out;
+}

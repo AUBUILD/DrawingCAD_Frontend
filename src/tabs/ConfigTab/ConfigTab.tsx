@@ -13,6 +13,12 @@ export interface ConfigTabProps {
   setSlabProjOffsetDraft: (val: string) => void;
   slabProjLayerDraft: string;
   setSlabProjLayerDraft: (val: string) => void;
+  devTitleYOffsetDraft: string;
+  setDevTitleYOffsetDraft: (val: string) => void;
+  devSectionTextRowStepDraft: string;
+  setDevSectionTextRowStepDraft: (val: string) => void;
+  steelLabelOffsetDraft: string;
+  setSteelLabelOffsetDraft: (val: string) => void;
 
   // Template
   templateName: string | null;
@@ -76,6 +82,12 @@ const ConfigTabInner: React.FC<ConfigTabProps> = ({
   setSlabProjOffsetDraft,
   slabProjLayerDraft,
   setSlabProjLayerDraft,
+  devTitleYOffsetDraft,
+  setDevTitleYOffsetDraft,
+  devSectionTextRowStepDraft,
+  setDevSectionTextRowStepDraft,
+  steelLabelOffsetDraft,
+  setSteelLabelOffsetDraft,
   templateName,
   templateLayers,
   onUploadTemplate,
@@ -109,6 +121,53 @@ const ConfigTabInner: React.FC<ConfigTabProps> = ({
 
   return (
     <div className="form">
+      <div className="configPrefCard">
+        <div className="sectionHeader" style={{ marginTop: 0 }}>
+          <div>Preferencias</div>
+          <div className="mutedSmall">Modo por defecto para acero al crear/cargar vigas</div>
+        </div>
+
+        <div className="grid4">
+          <label className="field">
+            <div className="label">Preferencia predeterminada</div>
+            <select
+              className="input"
+              value={defaultPref}
+              onChange={(e) => onChangeDefaultPref(e.target.value as 'basico' | 'basico_bastones' | 'personalizado')}
+            >
+              <option value="basico">Preferencia 01: Basico</option>
+              <option value="basico_bastones">Preferencia 02: Basico + Bastones</option>
+              <option value="personalizado">Personalizado</option>
+            </select>
+          </label>
+        </div>
+
+        <div className="rowBetween" style={{ gap: 10, alignItems: 'center', marginTop: 8 }}>
+          <div className="mutedSmall">
+            Plantilla: <span className="mono">{templateName ?? '-'}</span>
+          </div>
+          <div style={{ display: 'flex', gap: 8 }}>
+            <button className="btnSmall btnPrimaryAction" type="button" onClick={() => templateInputRef.current?.click()} disabled={busy}>
+              Cargar plantilla DXF
+            </button>
+            <button className="btnSmall btnSubtleAction" type="button" onClick={onClearTemplate} disabled={busy || !templateName}>
+              Quitar plantilla
+            </button>
+            <input
+              ref={templateInputRef}
+              type="file"
+              accept=".dxf"
+              style={{ display: 'none' }}
+              onChange={(e) => {
+                const f = e.target.files?.[0];
+                e.target.value = '';
+                if (f) onUploadTemplate(f);
+              }}
+            />
+          </div>
+        </div>
+      </div>
+
       <div className="sectionHeader">
         <div>Exportación DXF</div>
         <div className="mutedSmall">Plantilla + asignación de capas (casco y acero opcional)</div>
@@ -132,30 +191,24 @@ const ConfigTabInner: React.FC<ConfigTabProps> = ({
         </label>
       </div>
 
-      <div className="rowBetween" style={{ gap: 10, alignItems: 'center' }}>
-        <div className="mutedSmall">
-          Plantilla: <span className="mono">{templateName ?? '—'}</span>
-        </div>
+      <div className="sectionHeader">
+        <div>Posicion textos DXF</div>
+        <div className="mutedSmall">Ajuste fino de offsets en metros para exportacion</div>
+      </div>
 
-        <div style={{ display: 'flex', gap: 8 }}>
-          <button className="btnSmall" type="button" onClick={() => templateInputRef.current?.click()} disabled={busy}>
-            Cargar plantilla DXF
-          </button>
-          <button className="btnSmall" type="button" onClick={onClearTemplate} disabled={busy || !templateName}>
-            Quitar plantilla
-          </button>
-          <input
-            ref={templateInputRef}
-            type="file"
-            accept=".dxf"
-            style={{ display: 'none' }}
-            onChange={(e) => {
-              const f = e.target.files?.[0];
-              e.target.value = '';
-              if (f) onUploadTemplate(f);
-            }}
-          />
-        </div>
+      <div className="grid4">
+        <label className="field">
+          <div className="label">Titulo desarrollo Y offset (m)</div>
+          <input className="input" type="number" step="0.01" value={devTitleYOffsetDraft} onChange={(e) => setDevTitleYOffsetDraft(e.target.value)} />
+        </label>
+        <label className="field">
+          <div className="label">Paso filas seccion (m)</div>
+          <input className="input" type="number" step="0.01" value={devSectionTextRowStepDraft} onChange={(e) => setDevSectionTextRowStepDraft(e.target.value)} />
+        </label>
+        <label className="field">
+          <div className="label">Offset etiquetas acero (m)</div>
+          <input className="input" type="number" step="0.01" value={steelLabelOffsetDraft} onChange={(e) => setSteelLabelOffsetDraft(e.target.value)} />
+        </label>
       </div>
 
       <div className="grid4">
@@ -281,3 +334,4 @@ const ConfigTabInner: React.FC<ConfigTabProps> = ({
 };
 
 export const ConfigTab = React.memo(ConfigTabInner);
+

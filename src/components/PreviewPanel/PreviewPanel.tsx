@@ -1,6 +1,7 @@
 import React from 'react';
 import type { DevelopmentIn, PreviewResponse } from '../../types';
 import type { QuantityDisplayState } from '../../services';
+import type { SteelOverlayLayer } from '../../overlay';
 
 type PreviewView = '2d' | '3d';
 type ThreeProjection = 'perspective' | 'orthographic';
@@ -54,6 +55,8 @@ export interface PreviewPanelProps {
   // Display options
   showLongitudinal: boolean;
   setShowLongitudinal: (show: boolean) => void;
+  showBastones: boolean;
+  setShowBastones: (show: boolean) => void;
   showStirrups: boolean;
   setShowStirrups: (show: boolean) => void;
   quantityDisplay: QuantityDisplayState;
@@ -77,6 +80,10 @@ export interface PreviewPanelProps {
   mToUnits: (dev: DevelopmentIn, m: number) => number;
   spanIndexAtX: (dev: DevelopmentIn, xU: number) => number;
   indexToLetters: (index: number) => string;
+
+  // Steel overlay selector
+  steelOverlayLayer: SteelOverlayLayer | null;
+  setSteelOverlayLayer: (layer: SteelOverlayLayer | null) => void;
 
   // Optional overlay rendered above the detail canvas
   detailOverlay?: React.ReactNode;
@@ -112,6 +119,8 @@ const PreviewPanelInner: React.FC<PreviewPanelProps> = ({
   setDetailViewport,
   showLongitudinal,
   setShowLongitudinal,
+  showBastones,
+  setShowBastones,
   showStirrups,
   setShowStirrups,
   quantityDisplay,
@@ -131,6 +140,8 @@ const PreviewPanelInner: React.FC<PreviewPanelProps> = ({
   mToUnits,
   spanIndexAtX,
   indexToLetters,
+  steelOverlayLayer,
+  setSteelOverlayLayer,
   detailOverlay,
 }) => {
   
@@ -157,84 +168,110 @@ const PreviewPanelInner: React.FC<PreviewPanelProps> = ({
         <div className="rowBetween" style={{ marginBottom: 8 }}>
           <div className="panelTitle" style={{ marginBottom: 0 }}>DETALLE DE VISTA</div>
 
-          <div style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap', justifyContent: 'flex-end' }}>
-            <div className="segmented" aria-label="Vista con zoom 2D/3D">
-              <button
-                className={previewView === '2d' ? 'segBtn segBtnActive' : 'segBtn'}
-                onClick={() => setPreviewView('2d')}
-                type="button"
-              >
-                2D
-              </button>
-              <button
-                className={previewView === '3d' ? 'segBtn segBtnActive' : 'segBtn'}
-                onClick={() => setPreviewView('3d')}
-                type="button"
-              >
-                3D
-              </button>
-            </div>
-
-            {previewView === '3d' ? (
-              <div className="segmented" aria-label="Proyección 3D">
+          <div className="viewerToolbarSplit">
+            <div className="viewerToolbarLeft">
+              <div className="steelLayerSelector">
+                {([
+                  { key: null, label: 'Off' },
+                  { key: 'acero' as const, label: 'Acero' },
+                  { key: 'bastones' as const, label: 'Bastones' },
+                  { key: 'estribos' as const, label: 'Estribos' },
+                ] as Array<{ key: SteelOverlayLayer | null; label: string }>).map(({ key, label }) => (
+                  <button
+                    key={label}
+                    className={`steelLayerBtn ${steelOverlayLayer === key ? 'steelLayerBtnActive' : ''}`}
+                    onClick={() => setSteelOverlayLayer(key)}
+                    type="button"
+                  >
+                    {label}
+                  </button>
+                ))}
+              </div>
+              <div className="segmented" aria-label="Vista con zoom 2D/3D">
                 <button
-                  className={threeProjection === 'perspective' ? 'segBtn segBtnActive' : 'segBtn'}
-                  onClick={() => setThreeProjection('perspective')}
+                  className={previewView === '2d' ? 'segBtn segBtnActive' : 'segBtn'}
+                  onClick={() => setPreviewView('2d')}
                   type="button"
-                  title="Cámara en perspectiva"
                 >
-                  Perspectiva
+                  2D
                 </button>
                 <button
-                  className={threeProjection === 'orthographic' ? 'segBtn segBtnActive' : 'segBtn'}
-                  onClick={() => setThreeProjection('orthographic')}
+                  className={previewView === '3d' ? 'segBtn segBtnActive' : 'segBtn'}
+                  onClick={() => setPreviewView('3d')}
                   type="button"
-                  title="Cámara ortográfica"
                 >
-                  Ortográfica
+                  3D
                 </button>
               </div>
-            ) : null}
+            </div>
+            <div className="viewerToolbarScroll">
+              <div className="viewerToolbar">
+              {previewView === '3d' ? (
+                <div className="segmented" aria-label="Proyección 3D">
+                  <button
+                    className={threeProjection === 'perspective' ? 'segBtn segBtnActive' : 'segBtn'}
+                    onClick={() => setThreeProjection('perspective')}
+                    type="button"
+                    title="Cámara en perspectiva"
+                  >
+                    Perspectiva
+                  </button>
+                  <button
+                    className={threeProjection === 'orthographic' ? 'segBtn segBtnActive' : 'segBtn'}
+                    onClick={() => setThreeProjection('orthographic')}
+                    type="button"
+                    title="Cámara ortográfica"
+                  >
+                    Ortográfica
+                  </button>
+                </div>
+              ) : null}
 
-            <button className="btnIcon" type="button" onClick={() => moveZoomSelection(-1)} disabled={!preview} title="Anterior">
-              {'<'}
-            </button>
-            <button className="btnIcon" type="button" onClick={() => moveZoomSelection(1)} disabled={!preview} title="Siguiente">
-              {'>'}
-            </button>
+              <button className="btnIcon" type="button" onClick={() => moveZoomSelection(-1)} disabled={!preview} title="Anterior">
+                {'<'}
+              </button>
+              <button className="btnIcon" type="button" onClick={() => moveZoomSelection(1)} disabled={!preview} title="Siguiente">
+                {'>'}
+              </button>
 
-            <label className="check" style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}>
-              <input type="checkbox" checked={showLongitudinal} onChange={(e) => setShowLongitudinal(e.target.checked)} />
-              <span className="mutedSmall">Longitudinal</span>
-            </label>
-            <label className="check" style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}>
-              <input type="checkbox" checked={showStirrups} onChange={(e) => setShowStirrups(e.target.checked)} />
-              <span className="mutedSmall">Estribos</span>
-            </label>
-            {previewView === '2d' && steelViewActive ? (
-              <label className="check" style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}>
-                <input
-                  type="checkbox"
-                  checked={steelYScale2}
-                  onChange={(e) => setSteelYScale2(e.target.checked)}
-                />
-                <span className="mutedSmall">Escala Y x2</span>
+              <label className="check viewerCheck">
+                <input type="checkbox" checked={showLongitudinal} onChange={(e) => setShowLongitudinal(e.target.checked)} />
+                <span className="mutedSmall">Longitudinal</span>
               </label>
-            ) : null}
-            {previewView === '3d' ? (
-              <label style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
-                <span className="mutedSmall">Transparencia</span>
-                <input
-                  type="range"
-                  min={0}
-                  max={100}
-                  value={threeOpacity}
-                  onChange={(e) => setThreeOpacity(Number(e.target.value))}
-                  style={{ width: 90 }}
-                />
-                <span className="mutedSmall" style={{ minWidth: 30, textAlign: 'right' }}>{threeOpacity}%</span>
+              <label className="check viewerCheck">
+                <input type="checkbox" checked={showBastones} onChange={(e) => setShowBastones(e.target.checked)} />
+                <span className="mutedSmall">Bastones</span>
               </label>
-            ) : null}
+              <label className="check viewerCheck">
+                <input type="checkbox" checked={showStirrups} onChange={(e) => setShowStirrups(e.target.checked)} />
+                <span className="mutedSmall">Estribos</span>
+              </label>
+              {previewView === '2d' && steelViewActive ? (
+                <label className="check viewerCheck">
+                  <input
+                    type="checkbox"
+                    checked={steelYScale2}
+                    onChange={(e) => setSteelYScale2(e.target.checked)}
+                  />
+                  <span className="mutedSmall">Escala Y x2</span>
+                </label>
+              ) : null}
+              {previewView === '3d' ? (
+                <label className="viewerOpacity">
+                  <span className="mutedSmall">Transparencia</span>
+                  <input
+                    className="viewerOpacityRange"
+                    type="range"
+                    min={0}
+                    max={100}
+                    value={threeOpacity}
+                    onChange={(e) => setThreeOpacity(Number(e.target.value))}
+                  />
+                  <span className="mutedSmall" style={{ minWidth: 30, textAlign: 'right' }}>{threeOpacity}%</span>
+                </label>
+              ) : null}
+              </div>
+            </div>
           </div>
         </div>
 
@@ -315,7 +352,7 @@ const PreviewPanelInner: React.FC<PreviewPanelProps> = ({
               />
 
               <div className="rowBetween" style={{ gap: 8 }}>
-                <div className="mutedSmall">Tramo {sectionInfo.spanIndex + 1} | x={sectionInfo.x_m.toFixed(2)} m</div>
+                <div className="mutedSmall">{`T${sectionInfo.spanIndex + 1}`} | x={sectionInfo.x_m.toFixed(2)} m</div>
                 <div className="mutedSmall">{(sectionXRangeU.xmax / (dev.unit_scale ?? 2)).toFixed(2)} m</div>
               </div>
 
@@ -343,7 +380,7 @@ const PreviewPanelInner: React.FC<PreviewPanelProps> = ({
                           title="Ir al corte"
                           style={{ flex: 1, textAlign: 'left' as any }}
                         >
-                          Corte {label} — Tramo {si + 1} | x={xm.toFixed(2)} m
+                          Corte {label} — {`T${si + 1}`} | x={xm.toFixed(2)} m
                         </button>
                         <button
                           type="button"

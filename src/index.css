@@ -1,0 +1,15 @@
+@import "tailwindcss";
+@import "./styles/colors.css";
+@import "./styles.css";
+
+html {
+  font-size: 75%;
+}
+
+html, body, #root {
+  height: 100%;
+}
+
+body {
+  margin: 0;
+}

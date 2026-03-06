@@ -62,13 +62,13 @@ const EstribosTable: React.FC<EstribosTableProps> = ({
           <div className="cell head rowLabel">Parámetros</div>
           {spans.map((_: SpanIn, i: number) => (
             <div className={'cell head'} key={`stirrups-head-${i}`}>
-              <div className="mono">Tramo {i + 1}</div>
+              <div className="mono">{`T${i + 1}`}</div>
             </div>
           ))}
           <div className="cell rowLabel">Diámetro</div>
           {spans.map((s: SpanIn, i: number) => {
             const st = getSt(s);
-            const dia = normalizeDiaKey(String(st.diameter ?? '3/8').replace(/[∅\s]/g, '')) || '3/8';
+            const dia = normalizeDiaKey(String(st.diameter ?? '8mm').replace(/[∅\s]/g, '')) || '8mm';
             return (
               <div className="cell" key={`st-dia-${i}`}>
                 <select
@@ -76,6 +76,7 @@ const EstribosTable: React.FC<EstribosTableProps> = ({
                   value={dia}
                   onChange={(e) => updateSpanStirrups(i, { diameter: e.target.value })}
                 >
+                  <option value="8mm">8mm</option>
                   <option value="3/8">3/8</option>
                   <option value="1/2">1/2</option>
                   <option value="5/8">5/8</option>

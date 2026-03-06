@@ -47,6 +47,7 @@ const DEFAULT_COL_RULES: SteelColRule[] = [
 ];
 
 const DEFAULT_REBAR_DIAMETERS_CM: Record<string, number> = {
+  '8mm': 0.8,
   '1/2': 1.27,
   '5/8': 1.5875,
   '3/4': 1.905,
@@ -57,6 +58,8 @@ const DEFAULT_REBAR_DIAMETERS_CM: Record<string, number> = {
 function normalizeDiaKey(dia: string) {
   const s = String(dia || '').trim().replace(/"/g, '');
   if (s === '1 3/8' || s === '1-3/8' || s === "1-3/8'" || s === '1-3/8in') return '1-3/8';
+  const lo = s.toLowerCase();
+  if (lo === '8mm' || lo === '8 mm' || lo === '∅8mm' || lo === '∅8') return '8mm';
   return s;
 }
 
@@ -110,6 +113,9 @@ export function diameterToCm(diaKey: string, settings?: SteelLayoutSettings | nu
   const table = settings?.rebar_diameters_cm ?? DEFAULT_REBAR_DIAMETERS_CM;
   const fromTable = table[key];
   if (typeof fromTable === 'number' && Number.isFinite(fromTable) && fromTable > 0) return fromTable;
+  // Check metric mm notation (e.g. "8mm")
+  const mmMatch = key.match(/^(\d+(?:\.\d+)?)\s*mm$/i);
+  if (mmMatch) return parseFloat(mmMatch[1]) / 10;
   const inches = parseInches(key);
   if (inches && Number.isFinite(inches) && inches > 0) return inchesToCm(inches);
   // fallback: 3/4
@@ -119,8 +125,8 @@ export function diameterToCm(diaKey: string, settings?: SteelLayoutSettings | nu
 function normalizeStirrupsSection(input: unknown): Required<Pick<StirrupsSectionIn, 'shape' | 'diameter' | 'qty'>> {
   const src = (input ?? {}) as any;
   const shape = String(src.shape ?? 'rect').trim().toLowerCase() === 'rect' ? 'rect' : 'rect';
-  const diameterRaw = String(src.diameter ?? '3/8').trim();
-  const diameter = normalizeDiaKey(diameterRaw.replace(/[∅Ø\s]/g, '')) || '3/8';
+  const diameterRaw = String(src.diameter ?? '8mm').trim();
+  const diameter = normalizeDiaKey(diameterRaw.replace(/[∅Ø\s]/g, '')) || '8mm';
   const qtyRaw = Number(src.qty ?? 1);
   const qty = Number.isFinite(qtyRaw) ? Math.max(0, Math.floor(qtyRaw)) : 1;
   return { shape: shape as any, diameter, qty };
@@ -169,6 +175,19 @@ function symmetricZsCm(cols: number, b_centers_cm: number): number[] {
   return zs;
 }
 
+function packageZsCm(cols: number, db_cm: number): number[] {
+  if (cols <= 1) return [0];
+  const pitch = Math.max(0, db_cm);
+  const half = (cols - 1) / 2;
+  const out: number[] = [];
+  for (let c = 0; c < cols; c++) out.push((c - half) * pitch);
+  return out;
+}
+
+function isVigueta(dev: DevelopmentIn): boolean {
+  return String((dev as any)?.member_type ?? 'viga').trim().toLowerCase() === 'vigueta';
+}
+
 function buildPairSlots(rows: number, cols: number): Array<{ r: number; cL: number; cR: number }> {
   const pairs: Array<{ r: number; cL: number; cR: number }> = [];
   const halfPairs = Math.floor(cols / 2);
@@ -213,6 +232,7 @@ function validateYBounds(face: Face, h_cm: number, cover_cm: number, db_cm: numb
 }
 
 export function computeFaceLayoutCm(opts: {
+  dev?: DevelopmentIn | null;
   face: Face;
   b_cm: number;
   h_cm: number;
@@ -247,6 +267,24 @@ export function computeFaceLayoutCm(opts: {
     return Number.isFinite(v) && v > 0 ? v : s_min_cm_raw;
   })();
   const r = db_cm / 2;
+
+  // Vigueta: una sola fila, barras agrupadas y centradas (sin separacion minima obligatoria).
+  if (isVigueta((opts as any).dev ?? {})) {
+    const rows = 1;
+    const cols = Math.max(1, qty);
+    const y = yForRowCm(opts.face, h_cm, cover_cm, db_cm, 0, 0);
+    const zs = packageZsCm(cols, db_cm);
+    const bars_cm = zs.slice(0, qty).map((z) => ({ y_cm: y, z_cm: z }));
+    return {
+      ok: true,
+      rows,
+      cols,
+      bars_cm,
+      s_min_cm: 0,
+      db_cm,
+      debug: { member_type: 'vigueta', qty },
+    };
+  }
 
   // espacio útil para centros en ancho
   const b_centers_cm = b_cm - 2 * (cover_cm + r);
@@ -426,6 +464,7 @@ export function computeSpanSectionLayoutCm(args: {
   const steel = args.face === 'top' ? (args.span.steel_top ?? null) : (args.span.steel_bottom ?? null);
 
   return computeFaceLayoutCm({
+    dev: args.dev as any,
     face: args.face,
     b_cm,
     h_cm,
@@ -641,6 +680,47 @@ export function computeSpanSectionLayoutWithBastonesCm(args: {
   const totalQtyRequested = mainQty + bastonQtyRequested;
   const governingDb = Math.max(mainDb, bastonDb, mainDb);
   const sMin = e060SMinCm(governingDb, settings);
+
+  // Vigueta: una sola fila y paquete centrado (main + bastones), sin separacion minima entre barras.
+  if (isVigueta(args.dev)) {
+    const rows = 1;
+    const cols = Math.max(1, totalQtyRequested);
+    const y = yForRowCm(args.face, h_cm, cover_eff_cm, governingDb, 0, 0);
+    const zs = packageZsCm(cols, governingDb);
+
+    let idx = 0;
+    const nextPt = () => ({ y_cm: y, z_cm: zs[Math.min(idx++, zs.length - 1)] ?? 0 });
+
+    const main_bars_cm: Array<{ y_cm: number; z_cm: number }> = [];
+    for (let i = 0; i < mainQty; i++) main_bars_cm.push(nextPt());
+
+    const baston_l1_bars_cm: Array<{ y_cm: number; z_cm: number }> = [];
+    for (let i = 0; i < bastonL1QtyRequested; i++) baston_l1_bars_cm.push(nextPt());
+
+    const baston_l2_bars_cm: Array<{ y_cm: number; z_cm: number }> = [];
+    for (let i = 0; i < bastonL2QtyRequested; i++) baston_l2_bars_cm.push(nextPt());
+
+    return {
+      ok: true,
+      rows,
+      cols,
+      s_min_cm: 0,
+      db_governing_cm: governingDb,
+      main_db_cm: mainDb,
+      baston_db_cm: bastonDb,
+      main_bars_cm,
+      baston_pool_bars_cm: [...baston_l1_bars_cm, ...baston_l2_bars_cm],
+      baston_l1_bars_cm,
+      baston_l2_bars_cm,
+      debug: {
+        member_type: 'vigueta',
+        mainQty,
+        bastonL1Qty_requested: bastonL1QtyRequested,
+        bastonL2Qty_requested: bastonL2QtyRequested,
+        totalQty_requested: totalQtyRequested,
+      },
+    };
+  }
 
   // --- Nuevo: grid y asignación por filas ---
   // Regla: completar una fila antes de pasar a la siguiente.
