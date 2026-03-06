@@ -17,6 +17,7 @@ interface UseDetailCanvasParams {
   steelViewActive: boolean;
   steelYScale2: boolean;
   showLongitudinal: boolean;
+  showBastones: boolean;
   showStirrups: boolean;
   recubrimiento: number;
   hookLegM: number;
@@ -40,6 +41,7 @@ export function useDetailCanvas({
   steelViewActive,
   steelYScale2,
   showLongitudinal,
+  showBastones,
   showStirrups,
   recubrimiento,
   hookLegM,
@@ -114,6 +116,7 @@ export function useDetailCanvas({
             if (showLongitudinal || showStirrups) {
               drawSteelOverlay(canvas, preview, dev, renderBounds, recubrimiento, hookLegM, {
                 showLongitudinal,
+                showBastones,
                 showStirrups,
                 yScale: steelViewActive && steelYScale2 ? 2 : 1,
                 highlightBastonTags: selectedBastonDetailTags ?? undefined,
@@ -150,6 +153,7 @@ export function useDetailCanvas({
     hookLegM,
     sectionXU,
     showLongitudinal,
+    showBastones,
     showStirrups,
     steelYScale2,
     quantityDisplay,

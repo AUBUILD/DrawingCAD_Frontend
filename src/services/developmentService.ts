@@ -92,7 +92,7 @@ export const INITIAL_SPAN: SpanIn = {
   L: 3.0,
   h: 0.5,
   b: 0.3,
-  stirrups_section: { shape: 'rect', diameter: '3/8', qty: 1 },
+  stirrups_section: { shape: 'rect', diameter: '8mm', qty: 1 },
   steel_top: { qty: 3, diameter: '3/4' },
   steel_bottom: { qty: 3, diameter: '3/4' },
 };
@@ -257,8 +257,8 @@ export function cloneNode(node: NodeIn): NodeIn {
 export function normalizeStirrupsSection(input: unknown) {
   const src = (input ?? {}) as any;
   const shape = String(src.shape ?? 'rect').trim().toLowerCase() === 'rect' ? 'rect' : 'rect';
-  const diameterRaw = String(src.diameter ?? '3/8').trim();
-  const diameter = normalizeDiaKey(diameterRaw.replace(/[∅Ø\s]/g, '')) || '3/8';
+  const diameterRaw = String(src.diameter ?? '8mm').trim();
+  const diameter = normalizeDiaKey(diameterRaw.replace(/[∅Ø\s]/g, '')) || '8mm';
   const qtyRaw = Number(src.qty ?? 1);
   const qty = Number.isFinite(qtyRaw) ? Math.max(0, Math.floor(qtyRaw)) : 1;
   return { shape: shape as any, diameter, qty } as { shape: 'rect'; diameter: string; qty: number };
@@ -427,7 +427,7 @@ export function normalizeDev(input: DevelopmentIn, appCfg: AppConfig): Developme
         return {
           case_type: 'asim_uno' as any,
           design_mode: mode as any,
-          diameter: '3/8',
+          diameter: '8mm',
           left_spec: defaultSpec,
           center_spec: defaultSpec,
           right_spec: null,
@@ -436,7 +436,7 @@ export function normalizeDev(input: DevelopmentIn, appCfg: AppConfig): Developme
       return {
         case_type: (ct === 'asim_ambos' ? 'asim_ambos' : 'simetrica') as any,
         design_mode: mode as any,
-        diameter: '3/8',
+        diameter: '8mm',
         left_spec: defaultSpec,
         center_spec: null,
         right_spec: defaultSpec,
@@ -452,7 +452,7 @@ export function normalizeDev(input: DevelopmentIn, appCfg: AppConfig): Developme
       // Completar diámetro si falta
       const diaRaw = String((stirrups as any).diameter ?? '').trim();
       const diaClean = normalizeDiaKey(diaRaw.replace(/[∅Ø\s]/g, ''));
-      (stirrups as any).diameter = diaClean || '3/8';
+      (stirrups as any).diameter = diaClean || '8mm';
 
       const hasAnySpec = Boolean(
         String((stirrups as any).left_spec ?? '').trim() ||

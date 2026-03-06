@@ -1,7 +1,7 @@
 import React from 'react';
 import ReactDOM from 'react-dom/client';
 import App from './App';
-import './styles.css';
+import './index.css';
 
 class ErrorBoundary extends React.Component<{ children: React.ReactNode }, { hasError: boolean; message: string }>
 {
@@ -15,7 +15,7 @@ class ErrorBoundary extends React.Component<{ children: React.ReactNode }, { has
   render() {
     if (this.state.hasError) {
       return (
-        <div style={{ color: '#fff', background: '#0b1220', minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 24, textAlign: 'center' }}>
+        <div style={{ color: 'var(--color-text-primary)', background: 'var(--color-bg-page)', minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 24, textAlign: 'center' }}>
           Error de render: {this.state.message}
         </div>
       );

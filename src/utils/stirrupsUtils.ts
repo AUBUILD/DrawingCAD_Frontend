@@ -133,12 +133,16 @@ export function normalizeDiaKey(dia: string): string {
   // Manejar formatos especiales de 1-3/8
   if (s === '1 3/8' || s === '1-3/8' || s === '1-3/8\'' || s === '1-3/8in') return '1-3/8';
 
+  // Manejar diámetros métricos (8mm)
+  const lo = s.toLowerCase();
+  if (lo === '8mm' || lo === '8 mm') return '8mm';
+
   // Diámetros estándar
-  if (s === '3/8' || s === '1/2' || s === '5/8' || s === '3/4' || s === '1' || s === '1-3/8') return s;
+  if (s === '8mm' || s === '3/8' || s === '1/2' || s === '5/8' || s === '3/4' || s === '1' || s === '1-3/8') return s;
 
   // Fallback a parsing numérico y mapeo
   const n = Number.parseFloat(s);
-  if (!Number.isFinite(n)) return '3/8';
+  if (!Number.isFinite(n)) return '8mm';
   if (n <= 0.375) return '3/8';
   if (n <= 0.5) return '1/2';
   if (n <= 0.625) return '5/8';

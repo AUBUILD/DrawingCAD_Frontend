@@ -1,104 +1,7 @@
 import React from 'react';
-import type {
-  DevelopmentIn,
-  SpanIn,
-  StirrupsDistributionIn,
-  StirrupsSectionIn,
-  SteelMeta,
-  SteelKind,
-  SteelLayoutSettings,
-} from '../../types';
-
-/**
- * Slot de nodo para conexión
- */
-interface NodeSlot {
-  nodeIdx: number;
-  end: 1 | 2;
-  label: string;
-}
-
-/**
- * Tipo BastonCfg (del App.tsx)
- */
-interface BastonCfg {
-  l1_enabled?: boolean;
-  l2_enabled?: boolean;
-  l1_qty?: number;
-  l2_qty?: number;
-  l1_diameter?: string;
-  l2_diameter?: string;
-  L1_m?: number;
-  L2_m?: number;
-  L3_m?: number;
-}
-
-/**
- * Tipo StirrupsABCR (del App.tsx)
- */
-interface StirrupsABCR {
-  A_m: number;
-  b_n: number;
-  B_m: number;
-  c_n: number;
-  C_m: number;
-  R_m: number;
-}
-
-/**
- * Props para SteelTab
- */
-export interface SteelTabProps {
-  // Data
-  dev: DevelopmentIn;
-  appCfg: any;
-  defaultPref: 'basico' | 'basico_bastones' | 'personalizado';
-
-  // Draft states
-  steelLayoutDraft: string;
-  setSteelLayoutDraft: (draft: string) => void;
-  steelLayoutDraftDirtyRef: React.MutableRefObject<boolean>;
-
-  // Baston length edits
-  bastonLenEdits: Record<string, string>;
-  setBastonLenEdits: React.Dispatch<React.SetStateAction<Record<string, string>>>;
-
-  // Stirrups ABCR edits
-  stirrupsAbcrEdits: Record<string, string>;
-  setStirrupsAbcrEdits: React.Dispatch<React.SetStateAction<Record<string, string>>>;
-
-  // Warning state
-  warning: string | null;
-  setWarning: (warning: string | null) => void;
-
-  // Update functions
-  updateDevPatch: (patch: Partial<DevelopmentIn>) => void;
-  updateSpanSteel: (spanIdx: number, side: 'top' | 'bottom', patch: Partial<SteelMeta>) => void;
-  updateSpanStirrups: (spanIdx: number, patch: Partial<StirrupsDistributionIn>) => void;
-  updateSpanStirrupsSection: (spanIdx: number, patch: Partial<StirrupsSectionIn>) => void;
-  updateBaston: (spanIdx: number, side: 'top' | 'bottom', zone: 'z1' | 'z2' | 'z3', patch: Partial<BastonCfg>) => void;
-  setNodeSteelKind: (nodeIdx: number, side: 'top' | 'bottom', end: 1 | 2, kind: SteelKind) => void;
-  setNodeToFace: (nodeIdx: number, side: 'top' | 'bottom', end: 1 | 2, enabled: boolean) => void;
-  setNodeBastonLineKind: (nodeIdx: number, side: 'top' | 'bottom', end: 1 | 2, line: 1 | 2, kind: SteelKind) => void;
-  setNodeBastonLineToFace: (nodeIdx: number, side: 'top' | 'bottom', end: 1 | 2, line: 1 | 2, enabled: boolean) => void;
-
-  // Helper functions
-  getSteelLayoutSettings: (dev: DevelopmentIn) => SteelLayoutSettings;
-  clampNumber: (val: string | number, fallback: number) => number;
-  safeParseJson: <T>(json: string) => { ok: boolean; value?: T; error?: string };
-  fmt2: (n: number) => string;
-  buildNodeSlots: (nodes: any[]) => NodeSlot[];
-  nodeSteelKind: (node: any, side: 'top' | 'bottom', end: 1 | 2) => SteelKind;
-  nodeToFaceEnabled: (node: any, side: 'top' | 'bottom', end: 1 | 2) => boolean;
-  nodeBastonLineKind: (node: any, side: 'top' | 'bottom', end: 1 | 2, line: 1 | 2) => SteelKind;
-  nodeBastonLineToFaceEnabled: (node: any, side: 'top' | 'bottom', end: 1 | 2, line: 1 | 2) => boolean;
-  normalizeBastonCfg: (input: unknown) => BastonCfg;
-  snapBastonM: (v: number) => number;
-  formatStirrupsABCR: (p: StirrupsABCR) => string;
-  pickDefaultABCRForH: (h_m: number, mode: 'sismico' | 'gravedad') => StirrupsABCR;
-  parseStirrupsABCR: (text: string) => StirrupsABCR | null;
-  normalizeDiaKey: (dia: string) => string;
-}
+import type { SpanIn, SteelLayoutSettings } from '../../types';
+import type { SteelTabProps, NodeSlot, StirrupsABCR } from './steelTab.types';
+export type { SteelTabProps } from './steelTab.types';
 
 /**
  * Componente SteelTab - Configuración de acero corrido
@@ -271,7 +174,7 @@ const SteelTabInner: React.FC<SteelTabProps> = ({
           <div className="cell head"></div>
           {(dev.spans ?? []).map((_, i) => (
             <div className={'cell head'} key={`steel-span-head-${i}`}>
-              <div className="mono">Tramo {i + 1}</div>
+              <div className="mono">{`T${i + 1}`}</div>
             </div>
           ))}
 
@@ -351,7 +254,7 @@ const SteelTabInner: React.FC<SteelTabProps> = ({
           <div className="cell head"></div>
           {(dev.spans ?? []).map((_, i) => (
             <div className={'cell head'} key={`stsec-span-head-${i}`}>
-              <div className="mono">Tramo {i + 1}</div>
+              <div className="mono">{`T${i + 1}`}</div>
             </div>
           ))}
 
@@ -377,9 +280,10 @@ const SteelTabInner: React.FC<SteelTabProps> = ({
             <div className="cell" key={`stsec-dia-${i}`}>
               <select
                 className="cellInput"
-                value={String((s as any).stirrups_section?.diameter ?? '3/8')}
+                value={String((s as any).stirrups_section?.diameter ?? '8mm')}
                 onChange={(e) => updateSpanStirrupsSection(i, { diameter: e.target.value })}
               >
+                <option value="8mm">8mm</option>
                 <option value="3/8">3/8</option>
                 <option value="1/2">1/2</option>
                 <option value="5/8">5/8</option>
@@ -670,7 +574,7 @@ const SteelTabInner: React.FC<SteelTabProps> = ({
               <div className="cell head"></div>
               {spans.map((_, i) => (
                 <div className={'cell head'} key={`baston-head-${i}`}>
-                  <div className="mono">Tramo {i + 1}</div>
+                  <div className="mono">{`T${i + 1}`}</div>
                 </div>
               ))}
 
@@ -911,14 +815,14 @@ const SteelTabInner: React.FC<SteelTabProps> = ({
               <div className="cell head"></div>
               {spans.map((_, i) => (
                 <div className={'cell head'} key={`stirrups-head-${i}`}>
-                  <div className="mono">Tramo {i + 1}</div>
+                  <div className="mono">{`T${i + 1}`}</div>
                 </div>
               ))}
 
               <div className="cell rowLabel">Diámetro</div>
               {spans.map((s, i) => {
                 const st = getSt(s);
-                const dia = normalizeDiaKey(String(st.diameter ?? '3/8').replace(/[∅Ø\s]/g, '')) || '3/8';
+                const dia = normalizeDiaKey(String(st.diameter ?? '8mm').replace(/[∅Ø\s]/g, '')) || '8mm';
                 return (
                   <div className="cell" key={`st-dia-${i}`}>
                     <select
@@ -926,6 +830,7 @@ const SteelTabInner: React.FC<SteelTabProps> = ({
                       value={dia}
                       onChange={(e) => updateSpanStirrups(i, { diameter: e.target.value } as any)}
                     >
+                      <option value="8mm">8mm</option>
                       <option value="3/8">3/8</option>
                       <option value="1/2">1/2</option>
                       <option value="5/8">5/8</option>

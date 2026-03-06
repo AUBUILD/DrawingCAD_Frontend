@@ -76,7 +76,7 @@ const BastonesTable: React.FC<BastonesTableProps> = ({
           <div className="cell head rowLabel">Parámetros</div>
           {spans.map((_: SpanIn, i: number) => (
             <div className={'cell head'} key={`baston-head-${i}`}>
-              <div className="mono">Tramo {i + 1}</div>
+              <div className="mono">{`T${i + 1}`}</div>
             </div>
           ))}
           {(['top', 'bottom'] as const).flatMap((side) =>

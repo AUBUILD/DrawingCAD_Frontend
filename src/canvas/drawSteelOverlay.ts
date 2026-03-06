@@ -1,4 +1,4 @@
-import type { PreviewResponse, DevelopmentIn, BastonCfg, SpanIn } from '../types';
+﻿import type { PreviewResponse, DevelopmentIn, BastonCfg, SpanIn } from '../types';
 import {
   canvasMapper,
   mToUnits,
@@ -22,12 +22,13 @@ export function drawSteelOverlay(
   renderBounds: Bounds,
   recubrimientoM: number,
   hookLegM: number,
-  opts?: { showLongitudinal?: boolean; showStirrups?: boolean; yScale?: number; highlightBastonTags?: string[]; highlightBastonSpans?: number[] }
+  opts?: { showLongitudinal?: boolean; showBastones?: boolean; showStirrups?: boolean; yScale?: number; highlightBastonTags?: string[]; highlightBastonSpans?: number[] }
 ) {
   const ctx = canvas.getContext('2d');
   if (!ctx) return;
 
   const showLongitudinal = opts?.showLongitudinal ?? true;
+  const showBastones = opts?.showBastones ?? true;
   const showStirrups = opts?.showStirrups ?? true;
   const yScale = opts?.yScale ?? 1;
   const highlightBastonTags = opts?.highlightBastonTags ?? [];
@@ -106,7 +107,7 @@ export function drawSteelOverlay(
     const activeStroke = tag ? colorForTag(tag, stroke, spanIdx) : stroke;
     ctx.strokeStyle = activeStroke;
     if (tag) ctx.lineWidth = widthForTag(tag, spanIdx);
-    // En el desarrollo 2D, una sola línea representa el grupo (qty no crea líneas paralelas).
+    // En el desarrollo 2D, una sola lÃ­nea representa el grupo (qty no crea lÃ­neas paralelas).
     const y = yBase;
     const [cx0, cy] = toCanvas(x0, y);
     const [cx1] = toCanvas(x1, y);
@@ -120,9 +121,9 @@ export function drawSteelOverlay(
     ctx.lineWidth = prevW;
   }
 
-  // Zona 1: 2 líneas (según croquis)
-  // - línea 1: 0 → L1
-  // - línea 2: recubrimiento hacia adentro, 0 → (L1 - Lc)
+  // Zona 1: 2 lÃ­neas (segÃºn croquis)
+  // - lÃ­nea 1: 0 â†’ L1
+  // - lÃ­nea 2: recubrimiento hacia adentro, 0 â†’ (L1 - Lc)
   function drawBastonZona1(x0: number, x1Full: number, yBase: number, qty: number, towardCenterSign: 1 | -1) {
     if (!ctx) return;
     const prev = ctx.strokeStyle;
@@ -130,7 +131,7 @@ export function drawSteelOverlay(
     for (let k = 0; k < qty; k++) {
       const y1 = yBase + towardCenterSign * k * bastonSpacingU;
 
-      // línea completa
+      // lÃ­nea completa
       {
         const [cx0, cy] = toCanvas(x0, y1);
         const [cx1] = toCanvas(x1Full, y1);
@@ -142,7 +143,7 @@ export function drawSteelOverlay(
         drawEndDots(x0, y1, x1Full, y1, bastonStroke);
       }
 
-      // línea interior (offset recubrimiento) termina en L1 - Lc
+      // lÃ­nea interior (offset recubrimiento) termina en L1 - Lc
       const x1Inner = x1Full - bastonLcU;
       if (x1Inner > x0 + 1e-6) {
         const y2 = y1 + towardCenterSign * coverU;
@@ -160,8 +161,8 @@ export function drawSteelOverlay(
   }
 
   // Zona 3 (espejo de Zona 1):
-  // - línea 1: (L - L1) → L
-  // - línea 2: recubrimiento hacia adentro, (L - L1 + Lc) → L
+  // - lÃ­nea 1: (L - L1) â†’ L
+  // - lÃ­nea 2: recubrimiento hacia adentro, (L - L1 + Lc) â†’ L
   function drawBastonZona3(x0Full: number, x1: number, yBase: number, qty: number, towardCenterSign: 1 | -1) {
     if (!ctx) return;
     const prev = ctx.strokeStyle;
@@ -169,7 +170,7 @@ export function drawSteelOverlay(
     for (let k = 0; k < qty; k++) {
       const y1 = yBase + towardCenterSign * k * bastonSpacingU;
 
-      // línea completa
+      // lÃ­nea completa
       {
         const [cx0, cy] = toCanvas(x0Full, y1);
         const [cx1] = toCanvas(x1, y1);
@@ -181,7 +182,7 @@ export function drawSteelOverlay(
         drawEndDots(x0Full, y1, x1, y1, bastonStroke);
       }
 
-      // línea interior (offset recubrimiento) inicia en (L-L1+Lc)
+      // lÃ­nea interior (offset recubrimiento) inicia en (L-L1+Lc)
       const x0Inner = x0Full + bastonLcU;
       if (x1 > x0Inner + 1e-6) {
         const y2 = y1 + towardCenterSign * coverU;
@@ -198,9 +199,9 @@ export function drawSteelOverlay(
     ctx.strokeStyle = prev;
   }
 
-  // Zona 2 (según croquis):
-  // - línea 1: L1 → (L - L2)
-  // - línea 2: recubrimiento hacia adentro, (L1 + Lc) → (L - L2 - Lc)
+  // Zona 2 (segÃºn croquis):
+  // - lÃ­nea 1: L1 â†’ (L - L2)
+  // - lÃ­nea 2: recubrimiento hacia adentro, (L1 + Lc) â†’ (L - L2 - Lc)
   function drawBastonZona2(x0Full: number, x1Full: number, yBase: number, qty: number, towardCenterSign: 1 | -1) {
     if (!ctx) return;
     const prev = ctx.strokeStyle;
@@ -208,7 +209,7 @@ export function drawSteelOverlay(
     for (let k = 0; k < qty; k++) {
       const y1 = yBase + towardCenterSign * k * bastonSpacingU;
 
-      // línea completa
+      // lÃ­nea completa
       {
         const [cx0, cy] = toCanvas(x0Full, y1);
         const [cx1] = toCanvas(x1Full, y1);
@@ -220,7 +221,7 @@ export function drawSteelOverlay(
         drawEndDots(x0Full, y1, x1Full, y1, bastonStroke);
       }
 
-      // línea interior (offset recubrimiento) recortada por Lc a ambos lados
+      // lÃ­nea interior (offset recubrimiento) recortada por Lc a ambos lados
       const x0Inner = x0Full + bastonLcU;
       const x1Inner = x1Full - bastonLcU;
       if (x1Inner > x0Inner + 1e-6) {
@@ -289,7 +290,7 @@ export function drawSteelOverlay(
     c.lineWidth = prevW;
   }
 
-  // Líneas por tramo (superior + inferior) + nodos
+  // LÃ­neas por tramo (superior + inferior) + nodos
   const dotR = 3;
   ctx.fillStyle = 'rgba(250, 204, 21, 0.95)';
 
@@ -485,6 +486,7 @@ export function drawSteelOverlay(
     return;
   }
 
+  if (showBastones) {
   // Bastones por zonas (1/2/3) por tramo
   for (let i = 0; i < spans.length; i++) {
     const span = spans[i];
@@ -535,17 +537,17 @@ export function drawSteelOverlay(
           const x0 = x0Side;
           const x1 = Math.min(x1Side, x0Side + L3_u);
           if (x1 > x0 + 1e-6) {
-            // Línea 1 (exterior)
+            // LÃ­nea 1 (exterior)
             if (cfg.l1_enabled) drawBastonLines(x0, x1, yBase, 1, sign, bastonL1Stroke, `${side}.z1.L1`, i);
 
-            // Línea 2 (interior)
+            // LÃ­nea 2 (interior)
             const x1Inner = x1 - bastonLcU;
             if (cfg.l2_enabled && x1Inner > x0 + 1e-6) {
               drawBastonLines(x0, x1Inner, yBase + sign * coverU, 1, sign, bastonL2Stroke, `${side}.z1.L2`, i);
             }
           }
 
-          // Conexión en el nodo (Zona 1): usa el nodo izquierdo del tramo (end=2)
+          // ConexiÃ³n en el nodo (Zona 1): usa el nodo izquierdo del tramo (end=2)
           const n0 = nodes[i];
           if (n0) {
             const xFaceFor = (line: 1 | 2) => {
@@ -557,7 +559,7 @@ export function drawSteelOverlay(
                 : o + mToUnits(dev, clampNumber(n0.a1 ?? 0, 0));
             };
 
-            // Línea 1 (exterior)
+            // LÃ­nea 1 (exterior)
             {
               if (cfg.l1_enabled) {
                 const dia = String(cfg.l1_diameter ?? '3/4');
@@ -576,7 +578,7 @@ export function drawSteelOverlay(
               }
             }
 
-            // Línea 2 (interior): solo si existe (L3 > Lc)
+            // LÃ­nea 2 (interior): solo si existe (L3 > Lc)
             {
               const x1Inner = x1 - bastonLcU;
               if (x1Inner > x0 + 1e-6) {
@@ -609,7 +611,7 @@ export function drawSteelOverlay(
           const q2 = Math.max(1, Math.min(3, Math.round(cfg.l2_qty ?? 1)));
           const L1_u = mToUnits(dev, resolvedLenM(cfg, 'L1_m', defaultLenM));
           const L2_u = mToUnits(dev, resolvedLenM(cfg, 'L2_m', defaultLenM));
-          // NOTA: el recorte por Lc se aplica en el segundo trazo, no aquí.
+          // NOTA: el recorte por Lc se aplica en el segundo trazo, no aquÃ­.
           const x0 = x0Side + L1_u;
           const x1 = x1Side - L2_u;
           if (x1 > x0 + 1e-6) {
@@ -640,7 +642,7 @@ export function drawSteelOverlay(
             }
           }
 
-          // Conexión en el nodo (Zona 3): usa el nodo derecho del tramo (end=1)
+          // ConexiÃ³n en el nodo (Zona 3): usa el nodo derecho del tramo (end=1)
           const n1 = nodes[i + 1];
           if (n1) {
             const xFaceFor = (line: 1 | 2) => {
@@ -652,7 +654,7 @@ export function drawSteelOverlay(
                 : o + mToUnits(dev, clampNumber(n1.a2 ?? 0, 0));
             };
 
-            // Línea 1 (exterior)
+            // LÃ­nea 1 (exterior)
             {
               if (cfg.l1_enabled) {
                 const dia = String(cfg.l1_diameter ?? '3/4');
@@ -671,7 +673,7 @@ export function drawSteelOverlay(
               }
             }
 
-            // Línea 2 (interior): solo si existe (L3 > Lc)
+            // LÃ­nea 2 (interior): solo si existe (L3 > Lc)
             {
               const x0Inner = x0 + bastonLcU;
               if (x1 > x0Inner + 1e-6) {
@@ -701,7 +703,7 @@ export function drawSteelOverlay(
     drawSide('bottom');
   }
 
-  // Conexiones de bastones en nodos internos (Z3 tramo izq ↔ Z1 tramo der)
+  // Conexiones de bastones en nodos internos (Z3 tramo izq â†” Z1 tramo der)
   {
     const prev = ctx.strokeStyle;
     for (let i = 1; i < nodes.length - 1; i++) {
@@ -754,7 +756,7 @@ export function drawSteelOverlay(
           const leftEnabled = line === 1 ? cfgTopL.l1_enabled : cfgTopL.l2_enabled;
           const rightEnabled = line === 1 ? cfgTopR.l1_enabled : cfgTopR.l2_enabled;
           if (leftEnabled && rightEnabled) {
-            // Línea 2 solo existe si L3 > Lc en ambos tramos
+            // LÃ­nea 2 solo existe si L3 > Lc en ambos tramos
             const l2Ok = (() => {
               if (line === 1) return true;
               const L3uL = resolvedL3u(leftSpan, cfgTopL);
@@ -762,8 +764,8 @@ export function drawSteelOverlay(
               return L3uL > bastonLcU + 1e-6 && L3uR > bastonLcU + 1e-6;
             })();
             if (l2Ok) {
-              // En 2D longitudinal, una sola línea representa el grupo (qty no crea líneas paralelas).
-              // Por consistencia, la unión en el nodo interno también se dibuja una sola vez.
+              // En 2D longitudinal, una sola lÃ­nea representa el grupo (qty no crea lÃ­neas paralelas).
+              // Por consistencia, la uniÃ³n en el nodo interno tambiÃ©n se dibuja una sola vez.
               const yOff = line === 1 ? 0 : -coverU;
               const yL = yTopBastonL + yOff;
               const yR = yTopBastonR + yOff;
@@ -819,6 +821,8 @@ export function drawSteelOverlay(
     ctx.strokeStyle = prev;
   }
 
+
+  }
   // Conexiones en nodos internos (entre tramo i-1 y tramo i)
   for (let i = 1; i < nodes.length - 1; i++) {
     const node = nodes[i];
@@ -863,13 +867,13 @@ export function drawSteelOverlay(
       ctx.stroke();
     }
 
-    // Top: N.i.1 (cara izquierda) -> hacia +X, usa diámetro del tramo izquierdo
+    // Top: N.i.1 (cara izquierda) -> hacia +X, usa diÃ¡metro del tramo izquierdo
     if (topK1 === 'hook')
       drawHookOrAnchorage(xTopL, yTopL, +1, leftSpan.steel_top?.diameter ?? '3/4', 'hook', 'top', topToFace1 ? xTopR : undefined);
     if (topK1 === 'development')
       drawHookOrAnchorage(xTopL, yTopL, +1, leftSpan.steel_top?.diameter ?? '3/4', 'anchorage', 'top', topToFace1 ? xTopR : undefined, (node as any).steel_top_1_anchorage_length);
 
-    // Top: N.i.2 (cara derecha) -> hacia -X, usa diámetro del tramo derecho
+    // Top: N.i.2 (cara derecha) -> hacia -X, usa diÃ¡metro del tramo derecho
     if (topK2 === 'hook')
       drawHookOrAnchorage(xTopR, yTopR, -1, rightSpan.steel_top?.diameter ?? '3/4', 'hook', 'top', topToFace2 ? xTopL : undefined);
     if (topK2 === 'development')
@@ -884,7 +888,7 @@ export function drawSteelOverlay(
       ctx.stroke();
     }
 
-    // Bottom: N.i.1 (cara izquierda) -> hacia +X, usa diámetro del tramo izquierdo
+    // Bottom: N.i.1 (cara izquierda) -> hacia +X, usa diÃ¡metro del tramo izquierdo
     if (botK1 === 'hook')
       drawHookOrAnchorage(
         xBotL,
@@ -907,7 +911,7 @@ export function drawSteelOverlay(
         (node as any).steel_bottom_1_anchorage_length
       );
 
-    // Bottom: N.i.2 (cara derecha) -> hacia -X, usa diámetro del tramo derecho
+    // Bottom: N.i.2 (cara derecha) -> hacia -X, usa diÃ¡metro del tramo derecho
     if (botK2 === 'hook')
       drawHookOrAnchorage(
         xBotR,
@@ -984,7 +988,7 @@ export function drawSteelOverlay(
         );
     }
 
-    // Nodo n.1 (cara izquierda del último nodo) -> hacia +X, usa último tramo
+    // Nodo n.1 (cara izquierda del Ãºltimo nodo) -> hacia +X, usa Ãºltimo tramo
     {
       const lastNodeIdx = nodes.length - 1;
       const lastSpanIdx = spans.length - 1;
@@ -1040,3 +1044,4 @@ export function drawSteelOverlay(
 
   ctx.restore();
 }
+

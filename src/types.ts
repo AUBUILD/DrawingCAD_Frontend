@@ -1,6 +1,7 @@
 export type SteelKind = 'continuous' | 'hook' | 'development';
 
 export type BeamType = 'convencional' | 'prefabricada';
+export type MemberType = 'viga' | 'vigueta';
 
 export type ExportMode = 'single' | 'all' | 'all_conv' | 'all_prefab';
 
@@ -155,7 +156,7 @@ export type StirrupsSectionShape = 'rect';
 // `qty` representa la cantidad de estribos concéntricos (anidados) del mismo tipo.
 export type StirrupsSectionIn = {
   shape?: StirrupsSectionShape;
-  diameter?: string; // ej: "3/8"
+  diameter?: string; // ej: "8mm"
   qty?: number; // 0..n
 };
 
@@ -165,7 +166,7 @@ export type StirrupsDistributionIn = {
   design_mode?: 'sismico' | 'gravedad' | null;
 
   // Diámetro del estribo (para 3D/etiquetas). No afecta el parsing ABCR.
-  diameter?: string; // ej: "3/8"
+  diameter?: string; // ej: "8mm"
 
   left_spec?: string | null;
   center_spec?: string | null;
@@ -248,6 +249,9 @@ export type DevelopmentIn = {
   // Twin beam (convencional / prefabricada)
   beam_type?: BeamType;   // default 'convencional'
   twin_id?: string;       // UUID compartido entre gemelos
+
+  // Tipo de elemento longitudinal (UI-only por ahora)
+  member_type?: MemberType; // default 'viga'
 };
 
 export type PreviewRequest = {
@@ -304,4 +308,7 @@ export type BackendAppConfig = {
 
   slab_proj_offset_m?: number; // (m) se interpreta hacia abajo desde la línea superior
   slab_proj_layer?: string | null;
+  dev_title_y_offset_m?: number;
+  dev_section_text_row_step_m?: number;
+  steel_label_offset_m?: number;
 };

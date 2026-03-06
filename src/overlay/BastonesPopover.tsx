@@ -5,7 +5,7 @@ import { PopoverShell } from './PopoverShell';
 // ============================================================================
 // Constants
 // ============================================================================
-const DIAMETERS = ['3/8', '1/2', '5/8', '3/4', '1', '1-3/8'];
+const DIAMETERS = ['8mm', '3/8', '1/2', '5/8', '3/4', '1', '1-3/8'];
 const KIND_LABELS: Record<SteelKind, string> = { continuous: 'Cont', hook: 'Gancho', development: 'Anclaje' };
 const ZONES: Array<{ zone: 'z1' | 'z2' | 'z3'; label: string; badge: string }> = [
   { zone: 'z1', label: 'Zona 1 (izq)', badge: 'soBadge--z1' },
