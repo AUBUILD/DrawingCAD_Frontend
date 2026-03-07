@@ -19,10 +19,13 @@ interface LeftSidebarProps {
   onEditorTabChange?: (tab: string) => void;
   exportMode: ExportMode;
   setExportMode: (mode: ExportMode) => void;
+  exportOrder: 'name' | 'location';
+  setExportOrder: (order: 'name' | 'location') => void;
   onImportDxfFile: (file: File, config?: { h?: number; b?: number }) => void;
   onImportDxfBatchFile: (file: File, config?: { h?: number; b?: number }) => Promise<import('../../types').DevelopmentIn[]>;
   batchImportOrder: 'name' | 'location';
   setBatchImportOrder: React.Dispatch<React.SetStateAction<'name' | 'location'>>;
+  onAllGroupDevsChange?: (devs: DevelopmentIn[]) => void;
 }
 
 const L1_TABS: Array<{ id: PanelView; icon: IconName; label: string }> = [
@@ -46,10 +49,13 @@ export const LeftSidebar: React.FC<LeftSidebarProps> = ({
   onEditorTabChange,
   exportMode,
   setExportMode,
+  exportOrder,
+  setExportOrder,
   onImportDxfFile,
   onImportDxfBatchFile,
   batchImportOrder,
   setBatchImportOrder,
+  onAllGroupDevsChange,
 }) => {
   const [activePrimary, setActivePrimary] = useState<PanelView>('vigas');
 
@@ -83,6 +89,8 @@ export const LeftSidebar: React.FC<LeftSidebarProps> = ({
               onEditorTabChange={onEditorTabChange}
               exportMode={exportMode}
               setExportMode={setExportMode}
+              exportOrder={exportOrder}
+              setExportOrder={setExportOrder}
               externalView={activePrimary}
               onExternalViewChange={setActivePrimary}
               storageKey={beamsStorageKey}
@@ -90,6 +98,7 @@ export const LeftSidebar: React.FC<LeftSidebarProps> = ({
               onImportDxfBatchFile={onImportDxfBatchFile}
               batchImportOrder={batchImportOrder}
               setBatchImportOrder={setBatchImportOrder}
+              onAllGroupDevsChange={onAllGroupDevsChange}
             />
           </section>
         </div>

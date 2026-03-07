@@ -4,6 +4,7 @@ export type BeamType = 'convencional' | 'prefabricada';
 export type MemberType = 'viga' | 'vigueta';
 
 export type ExportMode = 'single' | 'all' | 'all_conv' | 'all_prefab';
+export type ExportOrder = 'name' | 'location';
 
 export type SupportType = 'columna_inferior' | 'columna_superior' | 'placa' | 'apoyo_intermedio' | 'ninguno';
 

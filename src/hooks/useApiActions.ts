@@ -26,16 +26,74 @@ import {
 import {
   clampNumber,
   safeParseJson,
+  safeGetLocalStorage,
   type DefaultPreferenceId,
 } from '../utils';
 import { downloadBlob } from '../services';
 import type { Selection } from '../services';
 import { exportMetradoSingle, exportMetradoAll } from '../tabs/MetradoTab/metradoExport';
 
+/** Replace the stored version of the active dev with the live version (debounce-safe). */
+function replaceActiveDev(devs: DevelopmentIn[], activeDev: DevelopmentIn): DevelopmentIn[] {
+  const activeName = activeDev.name;
+  let replaced = false;
+  return devs.map((d) => {
+    if (!replaced && activeName && d.name === activeName) {
+      replaced = true;
+      return activeDev;
+    }
+    return d;
+  });
+}
+
+/** Sync beam/group metadata onto a development (localStorage fallback version). */
+function syncDevMetaLS(dev: any, beam: any, group: any): DevelopmentIn {
+  const levelMap: Record<string, string> = { Piso: 'piso', 'Sótano': 'sotano', Azotea: 'azotea' };
+  return {
+    ...dev,
+    name: beam.id ?? dev.name,
+    floor_start: group.nivelInicial ?? dev.floor_start,
+    floor_end: group.nivelFinal ?? dev.floor_end,
+    level_type: levelMap[beam.type] ?? dev.level_type ?? 'piso',
+  };
+}
+
+/** Collect all DevelopmentIn stored in beams' groups from localStorage.
+ *  Syncs metadata (name, floors, level_type) from beam/group.
+ *  Replaces the active dev with the live version (in case debounce hasn't flushed). */
+function collectAllBeamDevelopments(storageKey: string, activeDev: DevelopmentIn): DevelopmentIn[] {
+  try {
+    const raw = safeGetLocalStorage(storageKey);
+    if (!raw) return [activeDev];
+    const parsed = JSON.parse(raw);
+    const beams: any[] = Array.isArray(parsed?.data) ? parsed.data : (Array.isArray(parsed) ? parsed : []);
+    const devs: DevelopmentIn[] = [];
+    const activeName = activeDev.name;
+    let replacedActive = false;
+    for (const beam of beams) {
+      const beamId: string = beam.id ?? '';
+      for (const group of (beam.groups ?? [])) {
+        if (!group.development) continue;
+        // Replace stored dev with live version if beam ID matches active dev name
+        if (!replacedActive && beamId && beamId === activeName) {
+          devs.push(activeDev);
+          replacedActive = true;
+        } else {
+          devs.push(syncDevMetaLS(group.development, beam, group));
+        }
+      }
+    }
+    return devs.length > 0 ? devs : [activeDev];
+  } catch {
+    return [activeDev];
+  }
+}
+
 interface UseApiActionsParams {
   dev: DevelopmentIn;
   developments: DevelopmentIn[];
   exportMode: ExportMode;
+  exportOrder: 'name' | 'location';
   setExportMode: React.Dispatch<React.SetStateAction<ExportMode>>;
   setDev: React.Dispatch<React.SetStateAction<DevelopmentIn>>;
   setDevelopments: React.Dispatch<React.SetStateAction<DevelopmentIn[]>>;
@@ -66,12 +124,15 @@ interface UseApiActionsParams {
   batchImportOrder: 'name' | 'location';
   authToken: string | null;
   variantScope: VariantScope | null;
+  beamsStorageKey: string;
+  allGroupDevs: DevelopmentIn[];
 }
 
 export function useApiActions({
   dev,
   developments,
   exportMode,
+  exportOrder,
   setExportMode,
   setDev,
   setDevelopments,
@@ -102,6 +163,8 @@ export function useApiActions({
   batchImportOrder,
   authToken,
   variantScope,
+  beamsStorageKey,
+  allGroupDevs,
 }: UseApiActionsParams) {
 
   const handleSaveManual = useCallback(async () => {
@@ -139,20 +202,30 @@ export function useApiActions({
     try {
       setBusy(true);
 
-      if (exportMode !== 'single' && developments.length > 1) {
+      if (exportMode !== 'single') {
+        // Collect all developments: prefer live allGroupDevs, fallback to localStorage, then developments array
+        const groupDevs = allGroupDevs.length > 0 ? replaceActiveDev(allGroupDevs, dev) : [];
+        const lsDevs = groupDevs.length > 1 ? groupDevs : collectAllBeamDevelopments(beamsStorageKey, dev);
+        const source = lsDevs.length > 1 ? lsDevs : (developments.length > 1 ? developments : lsDevs);
+
         // Filter by beam type if needed
-        let devsToExport = developments;
+        let devsToExport = source;
         if (exportMode === 'all_conv') {
-          devsToExport = developments.filter((d) => (d.beam_type ?? 'convencional') === 'convencional');
+          devsToExport = source.filter((d) => (d.beam_type ?? 'convencional') === 'convencional');
         } else if (exportMode === 'all_prefab') {
-          devsToExport = developments.filter((d) => d.beam_type === 'prefabricada');
+          devsToExport = source.filter((d) => d.beam_type === 'prefabricada');
         }
         if (!devsToExport.length) {
           setError('No hay vigas del tipo seleccionado para exportar.');
           return;
         }
-        // Sort by beam number (ascending) so smallest is at bottom in DXF
+        // Sort: by name (beam number ascending) or by location (y asc, then x asc — bottom-left first)
         const sorted = [...devsToExport].sort((a, b) => {
+          if (exportOrder === 'location') {
+            const ya = a.y0 ?? 0, yb = b.y0 ?? 0;
+            if (ya !== yb) return ya - yb;
+            return (a.x0 ?? 0) - (b.x0 ?? 0);
+          }
           const numA = parseInt((a.name ?? '').match(/\d+/)?.[0] ?? '999', 10);
           const numB = parseInt((b.name ?? '').match(/\d+/)?.[0] ?? '999', 10);
           return numA - numB;
@@ -183,7 +256,7 @@ export function useApiActions({
     } finally {
       setBusy(false);
     }
-  }, [payload, savedCuts, cascoLayer, steelLayer, drawSteel, dev.name, dev, developments, exportMode, recubrimientoM, sectionXU, quantityDisplay, setBusy, setError]);
+  }, [payload, savedCuts, cascoLayer, steelLayer, drawSteel, dev.name, dev, developments, exportMode, exportOrder, recubrimientoM, sectionXU, quantityDisplay, setBusy, setError, beamsStorageKey, allGroupDevs]);
 
   const onUploadTemplate = useCallback(async (file: File) => {
     try {
@@ -353,18 +426,34 @@ export function useApiActions({
   const onExportMetrado = useCallback(async () => {
     try {
       setBusy(true);
-      if (exportMode !== 'single' && developments.length > 1) {
-        let devsToExport = developments;
+      if (exportMode !== 'single') {
+        // Collect all developments: prefer live allGroupDevs, fallback to localStorage, then developments array
+        const groupDevs = allGroupDevs.length > 0 ? replaceActiveDev(allGroupDevs, dev) : [];
+        const lsDevs = groupDevs.length > 1 ? groupDevs : collectAllBeamDevelopments(beamsStorageKey, dev);
+        const source = lsDevs.length > 1 ? lsDevs : (developments.length > 1 ? developments : lsDevs);
+
+        let devsToExport = source;
         if (exportMode === 'all_conv') {
-          devsToExport = developments.filter((d) => (d.beam_type ?? 'convencional') === 'convencional');
+          devsToExport = source.filter((d) => (d.beam_type ?? 'convencional') === 'convencional');
         } else if (exportMode === 'all_prefab') {
-          devsToExport = developments.filter((d) => d.beam_type === 'prefabricada');
+          devsToExport = source.filter((d) => d.beam_type === 'prefabricada');
         }
         if (!devsToExport.length) {
           setError('No hay vigas del tipo seleccionado para exportar.');
           return;
         }
-        await exportMetradoAll(devsToExport.map((d) => ({ dev: d, recubrimiento: d.recubrimiento ?? recubrimientoM })));
+        // Sort consistently with DXF export
+        const sorted = [...devsToExport].sort((a, b) => {
+          if (exportOrder === 'location') {
+            const ya = a.y0 ?? 0, yb = b.y0 ?? 0;
+            if (ya !== yb) return ya - yb;
+            return (a.x0 ?? 0) - (b.x0 ?? 0);
+          }
+          const numA = parseInt((a.name ?? '').match(/\d+/)?.[0] ?? '999', 10);
+          const numB = parseInt((b.name ?? '').match(/\d+/)?.[0] ?? '999', 10);
+          return numA - numB;
+        });
+        await exportMetradoAll(sorted.map((d) => ({ dev: d, recubrimiento: d.recubrimiento ?? recubrimientoM })));
       } else {
         await exportMetradoSingle(dev, dev.recubrimiento ?? recubrimientoM);
       }
@@ -373,7 +462,7 @@ export function useApiActions({
     } finally {
       setBusy(false);
     }
-  }, [dev, developments, exportMode, recubrimientoM, setBusy, setError]);
+  }, [dev, developments, exportMode, exportOrder, recubrimientoM, setBusy, setError, beamsStorageKey, allGroupDevs]);
 
   return {
     handleSaveManual,

@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { assignProject, deleteProject, deleteAllProjects, fetchBackendVersion, fetchPreview, fetchUsers, fetchVariants, loginAuth, onAuthExpired, setAuthToken as setApiAuthToken, type UserWithAssignment, type VariantListItem, type VariantScope } from './api';
-import type { BackendAppConfig, BeamType, DevelopmentIn, ExportMode, PreviewResponse } from './types';
+import type { BackendAppConfig, BeamType, DevelopmentIn, ExportMode, ExportOrder, PreviewResponse } from './types';
 import { getSteelLayoutSettings } from './steelLayout';
 import {
   mToUnits, spanIndexAtX, normalizeBastonCfg, normalizeDev,
@@ -204,6 +204,7 @@ export default function App() {
     return null;
   });
   const [exportMode, setExportMode] = useState<ExportMode>('single');
+  const [exportOrder, setExportOrder] = useState<ExportOrder>('name');
 
   useEffect(() => { safeSetLocalStorage('beamdraw:steelOverlayLayer', steelOverlayLayer ?? ''); }, [steelOverlayLayer]);
   useEffect(() => { if (tab === 'acero') setSteelViewPinned(true); }, [tab]);
@@ -212,6 +213,7 @@ export default function App() {
   const [appCfg, setAppCfg] = useState<AppConfig>(DEFAULT_APP_CFG);
   const [developments, setDevelopments] = useState<DevelopmentIn[]>(() => [defaultDevelopment(DEFAULT_APP_CFG)]);
   const [activeDevIdx, setActiveDevIdx] = useState(0);
+  const [allGroupDevs, setAllGroupDevs] = useState<DevelopmentIn[]>([]);
 
   // Derived dev + adapter setDev for existing hooks (they operate on the active development)
   const dev = developments[activeDevIdx] ?? developments[0] ?? defaultDevelopment(DEFAULT_APP_CFG);
@@ -430,13 +432,13 @@ export default function App() {
     handleSaveManual, clearDevelopment, onExportDxf, onExportMetrado,
     onUploadTemplate, onClearTemplate, onImportDxfFile, onImportDxfBatchFile, applyJsonToForm,
   } = useApiActions({
-    dev, developments, exportMode, setExportMode, setDev, setDevelopments, setActiveDevIdx, appCfg, setAppCfg,
+    dev, developments, exportMode, setExportMode, exportOrder, setDev, setDevelopments, setActiveDevIdx, appCfg, setAppCfg,
     payload, savedCuts, cascoLayer, steelLayer, drawSteel, defaultPref,
     quantityDisplay, sectionXU, recubrimientoM: appCfg.recubrimiento,
     setBusy, setError, setWarning,
     setTemplateName, setTemplateLayers, setCascoLayer, setSteelLayer,
     jsonText, setSaveStatus, setSelection, setDetailViewport, setConcretoLocked, batchImportOrder,
-    authToken: effectiveAuthToken, variantScope,
+    authToken: effectiveAuthToken, variantScope, beamsStorageKey, allGroupDevs,
   });
 
   const {
@@ -1220,10 +1222,13 @@ export default function App() {
           }}
           exportMode={exportMode}
           setExportMode={setExportMode}
+          exportOrder={exportOrder}
+          setExportOrder={setExportOrder}
           onImportDxfFile={onImportDxfFile}
           onImportDxfBatchFile={onImportDxfBatchFile}
           batchImportOrder={batchImportOrder}
           setBatchImportOrder={setBatchImportOrder}
+          onAllGroupDevsChange={setAllGroupDevs}
         />
         {sideOpen ? (
           <div

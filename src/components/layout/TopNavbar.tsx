@@ -45,7 +45,6 @@ export const TopNavbar: React.FC<TopNavbarProps> = ({
       </button>
 
       <div className="aubBeamCtx">
-        <div className="aubBeamCode">{beamCode ?? 'VT-01'}</div>
         <div className="aubBeamSub">DrawingCAD Beam</div>
       </div>
 

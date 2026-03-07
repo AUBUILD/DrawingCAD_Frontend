@@ -12,9 +12,11 @@ interface ExportarPanelProps {
   busy?: boolean;
   exportMode: ExportMode;
   setExportMode: (mode: ExportMode) => void;
+  exportOrder: 'name' | 'location';
+  setExportOrder: (order: 'name' | 'location') => void;
 }
 
-export const ExportarPanel: React.FC<ExportarPanelProps> = ({ ctx, onExportDxf, onExportMetrado, busy, exportMode, setExportMode }) => {
+export const ExportarPanel: React.FC<ExportarPanelProps> = ({ ctx, onExportDxf, onExportMetrado, busy, exportMode, setExportMode, exportOrder, setExportOrder }) => {
   const [status, setStatus] = useState<string | null>(null);
 
   const selectedLabel = useMemo(() => ctx.selectedBeam?.id ?? 'Ninguna', [ctx.selectedBeam]);
@@ -37,6 +39,20 @@ export const ExportarPanel: React.FC<ExportarPanelProps> = ({ ctx, onExportDxf, 
         <input type="radio" checked={exportMode === 'all'} onChange={() => setExportMode('all')} />
         Todas las vigas ({ctx.beams.length})
       </label>
+
+      {exportMode !== 'single' && (
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 10, color: C.sub, paddingLeft: 4 }}>
+          <span>Orden:</span>
+          <label style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+            <input type="radio" checked={exportOrder === 'name'} onChange={() => setExportOrder('name')} />
+            Numeracion
+          </label>
+          <label style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+            <input type="radio" checked={exportOrder === 'location'} onChange={() => setExportOrder('location')} />
+            Ubicacion
+          </label>
+        </div>
+      )}
 
       <button
         type="button"

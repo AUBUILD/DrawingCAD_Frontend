@@ -33,6 +33,8 @@ export interface LeftPanelProps {
   onEditorTabChange?: (tab: string) => void;
   exportMode: ExportMode;
   setExportMode: (mode: ExportMode) => void;
+  exportOrder: 'name' | 'location';
+  setExportOrder: (order: 'name' | 'location') => void;
   onImportDxfFile: (file: File, config?: { h?: number; b?: number }) => void;
   onImportDxfBatchFile: (file: File, config?: { h?: number; b?: number }) => Promise<import('../types').DevelopmentIn[]>;
   batchImportOrder: 'name' | 'location';
@@ -56,6 +58,8 @@ export const LeftPanel: React.FC<LeftPanelProps> = ({
   onEditorTabChange,
   exportMode,
   setExportMode,
+  exportOrder,
+  setExportOrder,
   onImportDxfFile,
   onImportDxfBatchFile,
   batchImportOrder,
@@ -85,6 +89,8 @@ export const LeftPanel: React.FC<LeftPanelProps> = ({
           onEditorTabChange={onEditorTabChange}
           exportMode={exportMode}
           setExportMode={setExportMode}
+          exportOrder={exportOrder}
+          setExportOrder={setExportOrder}
           onImportDxfFile={onImportDxfFile}
           onImportDxfBatchFile={onImportDxfBatchFile}
           batchImportOrder={batchImportOrder}
