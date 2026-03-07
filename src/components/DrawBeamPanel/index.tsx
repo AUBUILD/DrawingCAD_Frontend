@@ -8,10 +8,27 @@ import { EditarPanel } from './EditarPanel';
 import { ExportarPanel } from './ExportarPanel';
 import { ConfigTab } from '../../tabs/ConfigTab';
 import type { DevelopmentIn, ExportMode } from '../../types';
-import type { PanelView } from './types';
+import type { PanelView, Viga, GrupoViga } from './types';
+import type { NivelType } from '../shared/tokens';
 import type { EditorTabProps } from './editorTabProps';
 
 const FONT = "'Inter', 'SF Pro Display', 'Segoe UI', system-ui, sans-serif";
+
+/** Map beam type to development level_type */
+const LEVEL_TYPE_MAP: Record<NivelType, string> = { Piso: 'piso', 'Sótano': 'sotano', Azotea: 'azotea' };
+
+/** Sync development metadata (name, floor range, level type) from beam + group. */
+function syncDevMeta(dev: DevelopmentIn, beam: Viga, group: GrupoViga): DevelopmentIn {
+  const name = beam.id;
+  const floor_start = group.nivelInicial;
+  const floor_end = group.nivelFinal;
+  const level_type = LEVEL_TYPE_MAP[beam.type] ?? 'piso';
+  if (dev.name === name && (dev as any).floor_start === floor_start
+      && (dev as any).floor_end === floor_end && (dev as any).level_type === level_type) {
+    return dev;
+  }
+  return { ...dev, name, floor_start, floor_end, level_type } as DevelopmentIn;
+}
 
 const S = {
   nav: {
@@ -78,6 +95,8 @@ export interface DrawBeamPanelProps {
   /** Export scope control (connected to App-level exportMode). */
   exportMode: ExportMode;
   setExportMode: (mode: ExportMode) => void;
+  exportOrder: 'name' | 'location';
+  setExportOrder: (order: 'name' | 'location') => void;
   /** Optional externally controlled L1 view (used by collapsed sidebar strip). */
   externalView?: PanelView;
   onExternalViewChange?: (view: PanelView) => void;
@@ -88,15 +107,18 @@ export interface DrawBeamPanelProps {
   onImportDxfBatchFile: (file: File, config?: { h?: number; b?: number }) => Promise<DevelopmentIn[]>;
   batchImportOrder: 'name' | 'location';
   setBatchImportOrder: React.Dispatch<React.SetStateAction<'name' | 'location'>>;
+  /** Called whenever beams change — provides all group developments for export-all. */
+  onAllGroupDevsChange?: (devs: DevelopmentIn[]) => void;
 }
 
 export const DrawBeamPanel: React.FC<DrawBeamPanelProps> = ({
   editorTabProps, onExportDxf, onExportMetrado, busy,
   activeDevelopment, onGroupDevelopmentLoad, onEditorTabChange,
-  exportMode, setExportMode,
+  exportMode, setExportMode, exportOrder, setExportOrder,
   externalView, onExternalViewChange,
   storageKey,
   onImportDxfFile, onImportDxfBatchFile, batchImportOrder, setBatchImportOrder,
+  onAllGroupDevsChange,
 }) => {
   const ctx = useBeams(storageKey);
 
@@ -115,9 +137,16 @@ export const DrawBeamPanel: React.FC<DrawBeamPanelProps> = ({
     if (ctx.selectedGroupId === prevGroupIdRef.current) return;
     prevGroupIdRef.current = ctx.selectedGroupId;
     if (onGroupDevelopmentLoad) {
-      onGroupDevelopmentLoad(ctx.selectedGroup?.development);
+      let devToLoad = ctx.selectedGroup?.development;
+      if (devToLoad && ctx.selectedBeam && ctx.selectedGroup) {
+        devToLoad = syncDevMeta(devToLoad, ctx.selectedBeam, ctx.selectedGroup);
+      } else if (!devToLoad && ctx.selectedBeam && ctx.selectedGroup && activeDevelopment) {
+        // Group has no development yet — carry current geometry but sync metadata
+        devToLoad = syncDevMeta(activeDevelopment, ctx.selectedBeam, ctx.selectedGroup);
+      }
+      onGroupDevelopmentLoad(devToLoad);
     }
-  }, [ctx.selectedGroupId, ctx.selectedGroup, onGroupDevelopmentLoad]);
+  }, [ctx.selectedGroupId, ctx.selectedGroup, ctx.selectedBeam, activeDevelopment, onGroupDevelopmentLoad]);
 
   // When L1 view changes away from 'editar', reset editor tab notification
   const prevViewRef = useRef<PanelView>(ctx.view);
@@ -131,14 +160,32 @@ export const DrawBeamPanel: React.FC<DrawBeamPanelProps> = ({
   // When the active development changes in App, save it back to the selected group
   const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   useEffect(() => {
-    if (!activeDevelopment || !ctx.selectedGroupId) return;
+    if (!activeDevelopment || !ctx.selectedGroupId || !ctx.selectedBeam) return;
     // Debounce to avoid saving on every keystroke
     if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
     saveTimerRef.current = setTimeout(() => {
-      ctx.saveGroupDevelopment(activeDevelopment);
+      // Sync metadata (name, floor range, level type) from beam + group
+      const group = ctx.selectedBeam!.groups.find(g => g.id === ctx.selectedGroupId);
+      const devToSave = group
+        ? syncDevMeta(activeDevelopment, ctx.selectedBeam!, group)
+        : activeDevelopment;
+      ctx.saveGroupDevelopment(devToSave);
     }, 500);
     return () => { if (saveTimerRef.current) clearTimeout(saveTimerRef.current); };
-  }, [activeDevelopment, ctx.selectedGroupId, ctx.saveGroupDevelopment]);
+  }, [activeDevelopment, ctx.selectedGroupId, ctx.selectedBeam, ctx.saveGroupDevelopment]);
+
+  // Emit all group developments to parent whenever beams change
+  useEffect(() => {
+    if (!onAllGroupDevsChange) return;
+    const devs: DevelopmentIn[] = [];
+    for (const beam of ctx.beams) {
+      for (const group of beam.groups) {
+        if (!group.development) continue;
+        devs.push(syncDevMeta(group.development, beam, group));
+      }
+    }
+    onAllGroupDevsChange(devs);
+  }, [ctx.beams, onAllGroupDevsChange]);
 
   return (
     <>
@@ -180,7 +227,7 @@ export const DrawBeamPanel: React.FC<DrawBeamPanelProps> = ({
           <EditarPanel ctx={ctx} editorTabProps={editorTabProps} onEditorTabChange={onEditorTabChange} />
         )}
         {ctx.view === 'exportar' && (
-          <ExportarPanel ctx={ctx} onExportDxf={onExportDxf} onExportMetrado={onExportMetrado} busy={busy} exportMode={exportMode} setExportMode={setExportMode} />
+          <ExportarPanel ctx={ctx} onExportDxf={onExportDxf} onExportMetrado={onExportMetrado} busy={busy} exportMode={exportMode} setExportMode={setExportMode} exportOrder={exportOrder} setExportOrder={setExportOrder} />
         )}
       </div>
     </>

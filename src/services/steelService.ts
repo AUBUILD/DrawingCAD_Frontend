@@ -524,37 +524,76 @@ export function applyBasicBastonesPreferenceToSpans(spans: SpanIn[], nodes: Node
   }
   for (let i = 0; i < spans.length; i++) {
     const span = spans[i] as any;
+    const L_m = Number(span.L ?? 0);
 
-    // DiÃ¡metros del acero corrido de este tramo
     const topDia = span.steel_top?.diameter ?? '5/8';
     const botDia = span.steel_bottom?.diameter ?? '5/8';
 
-    // Verificar anclaje real solo en extremos; en intermedios se habilita por preferencia
-    const topLeftAnchors = pref02AllowsBastonAtNode(i, 'top', 2, topDia);
-    const topRightAnchors = pref02AllowsBastonAtNode(i + 1, 'top', 1, topDia);
-    const botLeftAnchors = pref02AllowsBastonAtNode(i, 'bottom', 2, botDia);
-    const botRightAnchors = pref02AllowsBastonAtNode(i + 1, 'bottom', 1, botDia);
-
-    const hasTopBastones = topLeftAnchors || topRightAnchors;
-    const hasBotBastones = botLeftAnchors || botRightAnchors;
-
-    // Si no hay lados habilitados (tras regla de extremos/intermedios), no agregar bastones
-    if (!hasTopBastones && !hasBotBastones) continue;
+    // Verificar anclaje real (Ld) solo en nodos extremos; intermedios pasan
+    const topLeftOk = pref02AllowsBastonAtNode(i, 'top', 2, topDia);
+    const topRightOk = pref02AllowsBastonAtNode(i + 1, 'top', 1, topDia);
+    const botLeftOk = pref02AllowsBastonAtNode(i, 'bottom', 2, botDia);
+    const botRightOk = pref02AllowsBastonAtNode(i + 1, 'bottom', 1, botDia);
 
     // Inicializar bastones si no existen
     if (!span.bastones) span.bastones = {};
     if (!span.bastones.top) span.bastones.top = {};
     if (!span.bastones.bottom) span.bastones.bottom = {};
 
-    // Superior: Z1/Z3 segÃºn lado habilitado (extremos validan anclaje real; intermedios pasan)
-    span.bastones.top.z1 = topLeftAnchors ? { ...defaultBastonCfg() } : (span.bastones.top.z1 ?? {});
+    // Superior: solo validacion de anclaje (Ld), sin reglas por longitud de tramo
+    span.bastones.top.z1 = topLeftOk ? { ...defaultBastonCfg() } : (span.bastones.top.z1 ?? {});
     span.bastones.top.z2 = span.bastones.top.z2 ?? {};
-    span.bastones.top.z3 = topRightAnchors ? { ...defaultBastonCfg() } : (span.bastones.top.z3 ?? {});
+    span.bastones.top.z3 = topRightOk ? { ...defaultBastonCfg() } : (span.bastones.top.z3 ?? {});
 
-    // Inferior: Z2 si al menos un lado del tramo queda habilitado
-    span.bastones.bottom.z1 = span.bastones.bottom.z1 ?? {};
-    span.bastones.bottom.z2 = hasBotBastones ? { ...defaultBastonCfg() } : (span.bastones.bottom.z2 ?? {});
-    span.bastones.bottom.z3 = span.bastones.bottom.z3 ?? {};
+    // Inferior: reglas por longitud de tramo + validacion de anclaje (Ld)
+    if (L_m < 3.0) {
+      // L < 3m -> sin bastones inferiores
+      span.bastones.bottom.z1 = {};
+      span.bastones.bottom.z2 = {};
+      span.bastones.bottom.z3 = {};
+    } else if (L_m <= 5.0) {
+      // 3m <= L <= 5m -> bastones inferiores solo en apoyos (Z1/Z3), sin Z2
+      span.bastones.bottom.z1 = botLeftOk ? { ...defaultBastonCfg() } : (span.bastones.bottom.z1 ?? {});
+      span.bastones.bottom.z2 = span.bastones.bottom.z2 ?? {};
+      span.bastones.bottom.z3 = botRightOk ? { ...defaultBastonCfg() } : (span.bastones.bottom.z3 ?? {});
+    } else {
+      // L > 5m -> bastones inferiores solo en centro (Z2), sin Z1/Z3
+      span.bastones.bottom.z1 = {};
+      span.bastones.bottom.z2 = { ...defaultBastonCfg() };
+      span.bastones.bottom.z3 = {};
+    }
+  }
+
+  // Post-proceso: en nodos intermedios, si un tramo no tiene baston inferior
+  // en ese nodo, el tramo del otro lado tampoco debe tenerlo.
+  // Luego, en tramos intermedios, si Z1 o Z3 queda vacio el otro tambien.
+  const hasBot = (zone: any) => zone && zone.l1_enabled;
+
+  for (let n = 1; n < spans.length; n++) {
+    // Nodo intermedio n: spans[n-1].Z3 (izq) y spans[n].Z1 (der)
+    const leftSpan = spans[n - 1] as any;
+    const rightSpan = spans[n] as any;
+    const leftHas = hasBot(leftSpan.bastones?.bottom?.z3);
+    const rightHas = hasBot(rightSpan.bastones?.bottom?.z1);
+
+    if (!leftHas || !rightHas) {
+      // Si alguno no tiene, limpiar ambos lados del nodo
+      if (leftSpan.bastones?.bottom) leftSpan.bastones.bottom.z3 = {};
+      if (rightSpan.bastones?.bottom) rightSpan.bastones.bottom.z1 = {};
+    }
+  }
+
+  // En tramos intermedios: si Z1 o Z3 inferior quedo vacio, vaciar el otro
+  for (let i = 1; i < spans.length - 1; i++) {
+    const span = spans[i] as any;
+    const bot = span.bastones?.bottom;
+    if (!bot) continue;
+    const z1Has = hasBot(bot.z1);
+    const z3Has = hasBot(bot.z3);
+    if (!z1Has || !z3Has) {
+      bot.z1 = {};
+      bot.z3 = {};
+    }
   }
 
   return spans;
