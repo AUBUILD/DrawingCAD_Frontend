@@ -26,7 +26,6 @@ interface UseDetailCanvasParams {
   quantityDisplay?: QuantityDisplayState;
   quantityCutsXU?: number[];
   selection: any;
-  tab: string;
   steelViewPinned: boolean;
   sectionXU: number;
 }
@@ -50,7 +49,6 @@ export function useDetailCanvas({
   quantityDisplay,
   quantityCutsXU,
   selection,
-  tab,
   steelViewPinned,
   sectionXU,
 }: UseDetailCanvasParams) {
@@ -147,7 +145,6 @@ export function useDetailCanvas({
     selection,
     detailViewport,
     dev,
-    tab,
     steelViewPinned,
     recubrimiento,
     hookLegM,

@@ -302,7 +302,7 @@ export async function importDxf(file: File): Promise<ImportDxfResponse> {
   fd.append('file', file);
   let res: Response;
   try {
-    res = await fetch(`${BASE}/api/import-dxf`, { method: 'POST', body: fd });
+    res = await fetch(`${BASE}/api/import-dxf`, { method: 'POST', headers: authHeaders(), body: fd });
   } catch {
     throw new Error(
       'No se pudo conectar al servidor para importar DXF. '
@@ -322,6 +322,7 @@ export async function importDxfBatch(file: File, orderBy: 'name' | 'location' = 
   try {
     res = await fetch(`${BASE}/api/import-dxf-batch?${q.toString()}`, {
       method: 'POST',
+      headers: authHeaders(),
       body: fd,
     });
   } catch {
@@ -344,6 +345,7 @@ async function importForces(
   fd.append('payload', JSON.stringify({ targets }));
   const res = await fetch(`${BASE}${path}`, {
     method: 'POST',
+    headers: authHeaders(),
     body: fd,
   });
   if (!res.ok) return parseError(res);
@@ -361,19 +363,29 @@ export async function importDesignForcesGroup(file: File, target: ForceImportTar
 export async function uploadTemplateDxf(file: File): Promise<TemplateDxfInfo> {
   const fd = new FormData();
   fd.append('file', file);
-  const res = await fetch(`${BASE}/api/template-dxf`, { method: 'POST', body: fd });
+  const res = await fetch(`${BASE}/api/template-dxf`, {
+    method: 'POST',
+    headers: authHeaders(),
+    body: fd,
+  });
   if (!res.ok) return parseError(res);
   return res.json();
 }
 
 export async function getTemplateDxf(): Promise<TemplateDxfInfo> {
-  const res = await fetch(`${BASE}/api/template-dxf`, { method: 'GET' });
+  const res = await fetch(`${BASE}/api/template-dxf`, {
+    method: 'GET',
+    headers: authHeaders(),
+  });
   if (!res.ok) return parseError(res);
   return res.json();
 }
 
 export async function clearTemplateDxf(): Promise<void> {
-  const res = await fetch(`${BASE}/api/template-dxf`, { method: 'DELETE' });
+  const res = await fetch(`${BASE}/api/template-dxf`, {
+    method: 'DELETE',
+    headers: authHeaders(),
+  });
   if (!res.ok) return parseError(res);
 }
 

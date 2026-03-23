@@ -75,9 +75,9 @@ const S = {
 } as const;
 
 const NAV_ITEMS: Array<{ key: PanelView; label: string; icon: IconName }> = [
-  { key: 'vigas',    label: 'Vigas',    icon: 'beams' },
-  { key: 'nueva',    label: 'Nueva',  icon: 'plus' },
   { key: 'config',   label: 'Config',   icon: 'settings' },
+  { key: 'nueva',    label: 'Nueva',    icon: 'plus' },
+  { key: 'vigas',    label: 'Vigas',    icon: 'beams' },
   { key: 'exportar', label: 'Exportar', icon: 'export' },
 ];
 
@@ -163,6 +163,8 @@ export const DrawBeamPanel: React.FC<DrawBeamPanelProps> = ({
   useEffect(() => {
     if (prevViewRef.current === 'editar' && ctx.view !== 'editar') {
       onEditorTabChange?.('');
+      // Reset para que al volver a la misma viga se re-cargue el preview.
+      prevSelRef.current = '';
     }
     if (ctx.view !== prevViewRef.current) {
       onExternalViewChange?.(ctx.view);

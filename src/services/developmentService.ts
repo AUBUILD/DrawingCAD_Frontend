@@ -754,43 +754,10 @@ export function toBackendPayload(dev: DevelopmentIn): PreviewRequest {
 
 export function toPreviewPayloadSingle(dev: DevelopmentIn): DevelopmentIn {
   // Preview backend needs concrete geometry + essential steel info for correct visualization
-  const spans = (dev.spans ?? []).map((s) => ({
-    L: s.L,
-    h: s.h,
-    b: (s as any).b,
-    steel_top: (s as any).steel_top,
-    steel_bottom: (s as any).steel_bottom,
-    bastones: (s as any).bastones,
-    stirrups: (s as any).stirrups,
-    stirrups_section: (s as any).stirrups_section,
-  }));
-  const nodes = (dev.nodes ?? []).map((n) => ({
-    a1: (n as any).a1,
-    a2: n.a2,
-    b1: n.b1,
-    b2: n.b2,
-    project_a: (n as any).project_a,
-    project_b: (n as any).project_b,
-    support_type: (n as any).support_type,
-    steel_top_1_kind: (n as any).steel_top_1_kind,
-    steel_top_2_kind: (n as any).steel_top_2_kind,
-    steel_bottom_1_kind: (n as any).steel_bottom_1_kind,
-    steel_bottom_2_kind: (n as any).steel_bottom_2_kind,
-    steel_top_1_to_face: (n as any).steel_top_1_to_face,
-    steel_top_2_to_face: (n as any).steel_top_2_to_face,
-    steel_bottom_1_to_face: (n as any).steel_bottom_1_to_face,
-    steel_bottom_2_to_face: (n as any).steel_bottom_2_to_face,
-    steel_top_1_anchorage_length: (n as any).steel_top_1_anchorage_length,
-    steel_top_2_anchorage_length: (n as any).steel_top_2_anchorage_length,
-    steel_bottom_1_anchorage_length: (n as any).steel_bottom_1_anchorage_length,
-    steel_bottom_2_anchorage_length: (n as any).steel_bottom_2_anchorage_length,
-    steel_top_continuous: (n as any).steel_top_continuous,
-    steel_top_hook: (n as any).steel_top_hook,
-    steel_top_development: (n as any).steel_top_development,
-    steel_bottom_continuous: (n as any).steel_bottom_continuous,
-    steel_bottom_hook: (n as any).steel_bottom_hook,
-    steel_bottom_development: (n as any).steel_bottom_development,
-  }));
+  const spans = (dev.spans ?? []).map((s) => ({ ...s }));
+  // Spread completo del nodo para incluir todos los campos (steel_*, baston_*, etc.)
+  // y evitar que futuros campos se pierdan en el preview.
+  const nodes = (dev.nodes ?? []).map((n) => ({ ...n }));
   return {
     name: dev.name,
     level_type: (dev as any).level_type,

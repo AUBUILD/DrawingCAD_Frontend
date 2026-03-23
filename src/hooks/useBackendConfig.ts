@@ -97,7 +97,7 @@ export function useBackendConfig({
 
     // Proyección de losa
     setSlabProjOffsetDraft(String(backendCfg?.slab_proj_offset_m ?? 0.2));
-    setSlabProjLayerDraft(String(backendCfg?.slab_proj_layer ?? ''));
+    setSlabProjLayerDraft(String(backendCfg?.slab_proj_layer ?? '-- SECCION CORTE'));
     // Posición de textos DXF
     setDevTitleYOffsetDraft(String(backendCfg?.dev_title_y_offset_m ?? 0.4));
     setDevSectionTextRowStepDraft(String(backendCfg?.dev_section_text_row_step_m ?? 0.16));

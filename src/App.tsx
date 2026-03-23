@@ -272,7 +272,7 @@ export default function App() {
   const [defaultPref, setDefaultPref] = useState<DefaultPreferenceId>(() => {
     const saved = safeGetLocalStorage(DEFAULT_PREF_KEY);
     const pref = parseDefaultPref(saved);
-    if (!saved) safeSetLocalStorage(DEFAULT_PREF_KEY, 'personalizado');
+    if (!saved) safeSetLocalStorage(DEFAULT_PREF_KEY, 'basico');
     return pref;
   });
   const [editorOpen, setEditorOpen] = useState(false);
@@ -399,7 +399,7 @@ export default function App() {
   useEffect(() => { tabRef.current = tab; }, [tab]);
   useEffect(() => { setEditorOpen(false); }, [tab]);
   useEffect(() => { setDev((prev) => normalizeDev(prev, appCfg)); }, [appCfg]);
-  useEffect(() => { if (panelView !== 'editar') { setPreview(null); } }, [panelView]);
+  // Preview se mantiene en cache al cambiar de vista para evitar re-fetch innecesario.
 
   useEffect(() => {
     if (steelLayoutDraftDirtyRef.current) return;
@@ -696,7 +696,7 @@ export default function App() {
     selectedBastonDetailSpans,
     quantityDisplay,
     quantityCutsXU: [sectionXU, ...savedCuts.map((c) => c.xU)],
-    selection, tab, steelViewPinned, sectionXU,
+    selection, steelViewPinned, sectionXU,
   });
 
   useOverviewCanvas({
@@ -705,25 +705,27 @@ export default function App() {
     recubrimiento: appCfg.recubrimiento,
     quantityDisplay,
     quantityCutsXU: [sectionXU, ...savedCuts.map((c) => c.xU)],
-    tab, steelViewPinned,
+    steelViewPinned,
   });
 
   useEffect(() => {
     if (workspaceView === 'launcher') return;
     let cancelled = false;
-    (async () => {
-      setBusy(true); setError(null); setWarning(null);
-      try {
-        const data = await fetchPreview(previewPayloadInfo.payload);
-        if (cancelled) return;
-        setPreview(data);
-      } catch (e: any) {
-        if (cancelled) return;
-        setError(e?.message ?? String(e));
-        setPreview(null);
-      } finally { if (!cancelled) setBusy(false); }
-    })();
-    return () => { cancelled = true; };
+    const timer = window.setTimeout(() => {
+      (async () => {
+        setBusy(true); setError(null); setWarning(null);
+        try {
+          const data = await fetchPreview(previewPayloadInfo.payload);
+          if (cancelled) return;
+          setPreview(data);
+        } catch (e: any) {
+          if (cancelled) return;
+          setError(e?.message ?? String(e));
+          setPreview(null);
+        } finally { if (!cancelled) setBusy(false); }
+      })();
+    }, 300);
+    return () => { cancelled = true; window.clearTimeout(timer); };
   }, [previewPayloadInfo.key, workspaceView]);
 
   const { sectionXRangeU, sectionInfo, defaultCutAXU } = useSectionCanvas({
