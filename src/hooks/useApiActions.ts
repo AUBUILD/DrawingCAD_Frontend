@@ -1,6 +1,7 @@
 import { useCallback } from 'react';
 import type { DevelopmentIn, ExportMode, ForceImportResponse, ForceImportTarget, PreviewRequest, SpanIn } from '../types';
 import type { AppConfig } from '../services';
+import { manualSaveLockRef } from './useInitData';
 import {
   normalizeDev,
   defaultDevelopment,
@@ -171,6 +172,7 @@ export function useApiActions({
 
   const handleSaveManual = useCallback(async () => {
     try {
+      manualSaveLockRef.current = true;
       setBusy(true);
       setSaveStatus('saving');
       await saveState(payload, { token: authToken, variant: variantScope });
@@ -181,6 +183,7 @@ export function useApiActions({
       setError(err?.message ?? 'Error al guardar');
       setTimeout(() => setSaveStatus(null), 4000);
     } finally {
+      manualSaveLockRef.current = false;
       setBusy(false);
     }
   }, [payload, setBusy, setSaveStatus, setError, authToken, variantScope]);
@@ -336,6 +339,7 @@ export function useApiActions({
       if (res.warnings?.length) setWarning(res.warnings.join('\n'));
     } catch (e: any) {
       setError(e?.message ?? String(e));
+      throw e;
     } finally {
       setBusy(false);
     }

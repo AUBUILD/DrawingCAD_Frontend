@@ -21,7 +21,6 @@ interface UseOverviewCanvasParams {
   recubrimiento: number;
   quantityDisplay?: QuantityDisplayState;
   quantityCutsXU?: number[];
-  tab: string;
   steelViewPinned: boolean;
 }
 
@@ -37,7 +36,6 @@ export function useOverviewCanvas({
   recubrimiento,
   quantityDisplay,
   quantityCutsXU,
-  tab,
   steelViewPinned,
 }: UseOverviewCanvasParams) {
   const overviewPreviewDrawRafRef = useRef<number | null>(null);
@@ -112,7 +110,6 @@ export function useOverviewCanvas({
     showNT,
     selection,
     dev,
-    tab,
     steelViewPinned,
     sectionXU,
     recubrimiento,

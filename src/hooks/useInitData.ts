@@ -21,6 +21,9 @@ import {
   type DefaultPreferenceId,
 } from '../utils';
 
+/** Ref compartido entre auto-save y manual-save para evitar race conditions. */
+export const manualSaveLockRef = { current: false };
+
 interface UseInitDataParams {
   dev: DevelopmentIn;
   setDev: React.Dispatch<React.SetStateAction<DevelopmentIn>>;
@@ -90,6 +93,9 @@ export function useInitData({
   // Evita que el payload por defecto sobreescriba los datos del backend
   // cuando hay latencia (cold start de Render/Neon).
   const initialLoadDoneRef = useRef(false);
+  // Ref estable para leer defaultPref dentro del effect sin que sea dependencia reactiva.
+  const defaultPrefRef = useRef(defaultPref);
+  defaultPrefRef.current = defaultPref;
 
   // Cargar estado persistido (si existe backend/DB). Ignora fallos.
   useEffect(() => {
@@ -126,15 +132,16 @@ export function useInitData({
           setAppCfg(nextCfg);
 
           // Normalizar TODOS los desarrollos
+          const pref = defaultPrefRef.current;
           const normalizedDevs = stored.developments.map((d: DevelopmentIn) => {
             let finalD = d;
-            if (defaultPref === 'basico' || defaultPref === 'basico_bastones') {
-              const applyNodes = defaultPref === 'basico_bastones' ? applyBasicBastonesPreferenceToNodes : applyBasicPreferenceToNodes;
+            if (pref === 'basico' || pref === 'basico_bastones') {
+              const applyNodes = pref === 'basico_bastones' ? applyBasicBastonesPreferenceToNodes : applyBasicPreferenceToNodes;
               const updatedNodes = d.nodes && d.nodes.length > 0
                 ? applyNodes([...d.nodes])
                 : d.nodes;
               const updatedSpans = d.spans && d.spans.length > 0
-                ? (defaultPref === 'basico_bastones'
+                ? (pref === 'basico_bastones'
                   ? applyBasicBastonesPreferenceToSpans([...d.spans], updatedNodes ?? [])
                   : applyBasicPreferenceToSpans([...d.spans]))
                 : d.spans;
@@ -152,9 +159,10 @@ export function useInitData({
         if (cancelled) return;
         if (!loaded) {
           // Si no hay estado persistido, aplicar preferencia por defecto.
-          if (defaultPref === 'basico_bastones') {
+          const pref = defaultPrefRef.current;
+          if (pref === 'basico_bastones') {
             applyBasicoBastonesPreference();
-          } else if (defaultPref === 'basico') {
+          } else if (pref === 'basico') {
             applyBasicoPreference();
           } else {
             applyPersonalizadoPreference(readPersonalizado());
@@ -168,7 +176,10 @@ export function useInitData({
     return () => {
       cancelled = true;
     };
-  }, [authToken, variantScope, defaultPref]);
+  // defaultPref se excluye intencionalmente: el cambio de preferencia se aplica
+  // en usePreferences.onChangeDefaultPref, no necesita recargar del backend.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [authToken, variantScope]);
 
   // Auto-guardar preferencia "Personalizado" (debounced) para usarla como default.
   useEffect(() => {
@@ -235,15 +246,15 @@ export function useInitData({
     if (!initialLoadDoneRef.current) return;
     setSaveStatus('saving');
     const t = window.setTimeout(async () => {
+      // Si un manual-save está en curso, saltar este auto-save.
+      if (manualSaveLockRef.current) return;
       try {
         await saveState(payload, { token: authToken, variant: variantScope });
         setSaveStatus('saved');
-        // Ocultar mensaje después de 2 segundos
         setTimeout(() => setSaveStatus(null), 2000);
       } catch (err) {
         setSaveStatus('error');
         console.error('Error al guardar:', err);
-        // Ocultar mensaje de error después de 4 segundos
         setTimeout(() => setSaveStatus(null), 4000);
       }
     }, 600);

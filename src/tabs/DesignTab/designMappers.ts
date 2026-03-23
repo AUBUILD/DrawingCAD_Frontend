@@ -17,6 +17,8 @@ import type {
   DesignSectionInput,
 } from './designTypes';
 
+import { getAuthToken } from '../../api';
+
 const _env = (import.meta as any).env ?? {};
 const API_BASE: string = _env.VITE_API_URL ?? _env.VITE_API_BASE ?? '';
 
@@ -349,9 +351,12 @@ export function computeParamHash(dev: DevelopmentIn): string {
 export async function runDesignApi(config: DesignConfig, dev: DevelopmentIn): Promise<DesignRunResponse> {
   const url = `${API_BASE}/api/design/run`;
   const input = buildDesignInput(config, dev);
+  const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+  const token = getAuthToken();
+  if (token) headers.Authorization = `Bearer ${token}`;
   const resp = await fetch(url, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers,
     body: JSON.stringify(toApiRequest(input)),
   });
   if (!resp.ok) {

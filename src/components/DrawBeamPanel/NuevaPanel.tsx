@@ -470,12 +470,16 @@ export const NuevaPanel: React.FC<NuevaPanelProps> = ({
         <button
           type="button"
           disabled={!tipo || busy || cfgNumExists}
-          onClick={() => {
+          onClick={async () => {
             if (!tipo || !pendingFile || cfgNumExists) return;
-            const finVal = cfgFinSafe as Ordinal;
-            ctx.addBeam(tipo, { ini: ini as Ordinal, fin: finVal }, cfgEffNum);
-            onImportDxfFile(pendingFile, { h: dxfH, b: dxfB });
-            resetState();
+            try {
+              await onImportDxfFile(pendingFile, { h: dxfH, b: dxfB });
+              const finVal = cfgFinSafe as Ordinal;
+              ctx.addBeam(tipo, { ini: ini as Ordinal, fin: finVal }, cfgEffNum);
+              resetState();
+            } catch {
+              // Error ya manejado en onImportDxfFile (setError)
+            }
           }}
           style={{ ...S.createBtn(cfgColor), opacity: (tipo && !cfgNumExists) ? 1 : 0.5 }}
         >
