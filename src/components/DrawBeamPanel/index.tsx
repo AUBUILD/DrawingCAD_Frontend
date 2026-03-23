@@ -7,7 +7,7 @@ import { VigasPanel } from './VigasPanel';
 import { EditarPanel } from './EditarPanel';
 import { ExportarPanel } from './ExportarPanel';
 import { ConfigTab } from '../../tabs/ConfigTab';
-import type { DevelopmentIn, ExportMode } from '../../types';
+import type { DevelopmentIn, ExportMode, ForceImportResponse, ForceImportTarget } from '../../types';
 import type { PanelView, Viga, GrupoViga } from './types';
 import type { NivelType } from '../shared/tokens';
 import type { EditorTabProps } from './editorTabProps';
@@ -76,7 +76,7 @@ const S = {
 
 const NAV_ITEMS: Array<{ key: PanelView; label: string; icon: IconName }> = [
   { key: 'vigas',    label: 'Vigas',    icon: 'beams' },
-  { key: 'nueva',    label: '+ Nueva',  icon: 'plus' },
+  { key: 'nueva',    label: 'Nueva',  icon: 'plus' },
   { key: 'config',   label: 'Config',   icon: 'settings' },
   { key: 'exportar', label: 'Exportar', icon: 'export' },
 ];
@@ -105,6 +105,8 @@ export interface DrawBeamPanelProps {
   /** DXF import actions. */
   onImportDxfFile: (file: File, config?: { h?: number; b?: number }) => void;
   onImportDxfBatchFile: (file: File, config?: { h?: number; b?: number }) => Promise<DevelopmentIn[]>;
+  onImportForcesBatchFile?: (file: File, targets: ForceImportTarget[]) => Promise<ForceImportResponse>;
+  onImportForcesGroupFile?: (file: File, target: ForceImportTarget) => Promise<ForceImportResponse>;
   batchImportOrder: 'name' | 'location';
   setBatchImportOrder: React.Dispatch<React.SetStateAction<'name' | 'location'>>;
   /** Called whenever beams change — provides all group developments for export-all. */
@@ -117,25 +119,32 @@ export const DrawBeamPanel: React.FC<DrawBeamPanelProps> = ({
   exportMode, setExportMode, exportOrder, setExportOrder,
   externalView, onExternalViewChange,
   storageKey,
-  onImportDxfFile, onImportDxfBatchFile, batchImportOrder, setBatchImportOrder,
+  onImportDxfFile, onImportDxfBatchFile, onImportForcesBatchFile, onImportForcesGroupFile, batchImportOrder, setBatchImportOrder,
   onAllGroupDevsChange,
 }) => {
   const ctx = useBeams(storageKey);
 
+  // Sync external → internal view, but only when externalView actually changes
+  // (not when ctx.view changes internally via addBeam/selectBeam).
+  const prevExternalRef = useRef(externalView);
   useEffect(() => {
     if (!externalView) return;
-    if (ctx.view === externalView) return;
-    // Avoid forcing away from 'editar' when sidebar stays on "Vigas".
-    // This prevents a ping-pong loop between internal and external view states.
-    if (ctx.view === 'editar' && externalView === 'vigas') return;
-    ctx.setView(externalView);
+    if (externalView === prevExternalRef.current) {
+      prevExternalRef.current = externalView;
+      return;
+    }
+    prevExternalRef.current = externalView;
+    if (ctx.view !== externalView) {
+      ctx.setView(externalView);
+    }
   }, [externalView, ctx.view, ctx.setView]);
 
-  // When the selected group changes, emit its stored development to App
-  const prevGroupIdRef = useRef<string | null>(null);
+  // When the selected beam or group changes, emit its stored development to App
+  const prevSelRef = useRef<string>('');
   useEffect(() => {
-    if (ctx.selectedGroupId === prevGroupIdRef.current) return;
-    prevGroupIdRef.current = ctx.selectedGroupId;
+    const selKey = `${ctx.selectedBeamId ?? ''}::${ctx.selectedGroupId ?? ''}`;
+    if (selKey === prevSelRef.current) return;
+    prevSelRef.current = selKey;
     if (onGroupDevelopmentLoad) {
       let devToLoad = ctx.selectedGroup?.development;
       if (devToLoad && ctx.selectedBeam && ctx.selectedGroup) {
@@ -146,16 +155,20 @@ export const DrawBeamPanel: React.FC<DrawBeamPanelProps> = ({
       }
       onGroupDevelopmentLoad(devToLoad);
     }
-  }, [ctx.selectedGroupId, ctx.selectedGroup, ctx.selectedBeam, activeDevelopment, onGroupDevelopmentLoad]);
+  }, [ctx.selectedBeamId, ctx.selectedGroupId, ctx.selectedGroup, ctx.selectedBeam, activeDevelopment, onGroupDevelopmentLoad]);
 
   // When L1 view changes away from 'editar', reset editor tab notification
+  // and propagate internal view changes (e.g. selectBeam → editar) to parent
   const prevViewRef = useRef<PanelView>(ctx.view);
   useEffect(() => {
     if (prevViewRef.current === 'editar' && ctx.view !== 'editar') {
       onEditorTabChange?.('');
     }
+    if (ctx.view !== prevViewRef.current) {
+      onExternalViewChange?.(ctx.view);
+    }
     prevViewRef.current = ctx.view;
-  }, [ctx.view, onEditorTabChange]);
+  }, [ctx.view, onEditorTabChange, onExternalViewChange]);
 
   // When the active development changes in App, save it back to the selected group
   const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -211,7 +224,13 @@ export const DrawBeamPanel: React.FC<DrawBeamPanelProps> = ({
         })}
       </nav>
       <div style={S.body}>
-        {ctx.view === 'vigas' && <VigasPanel ctx={ctx} />}
+        {ctx.view === 'vigas' && (
+          <VigasPanel
+            ctx={ctx}
+            onImportForcesBatchFile={onImportForcesBatchFile}
+            onGroupDevelopmentLoad={onGroupDevelopmentLoad}
+          />
+        )}
         {ctx.view === 'config' && <ConfigTab {...editorTabProps.configTabProps} />}
         {ctx.view === 'nueva' && (
           <NuevaPanel
@@ -224,7 +243,13 @@ export const DrawBeamPanel: React.FC<DrawBeamPanelProps> = ({
           />
         )}
         {ctx.view === 'editar' && ctx.selectedBeam && (
-          <EditarPanel ctx={ctx} editorTabProps={editorTabProps} onEditorTabChange={onEditorTabChange} />
+          <EditarPanel
+            ctx={ctx}
+            editorTabProps={editorTabProps}
+            onEditorTabChange={onEditorTabChange}
+            onImportForcesGroupFile={onImportForcesGroupFile}
+            onGroupDevelopmentLoad={onGroupDevelopmentLoad}
+          />
         )}
         {ctx.view === 'exportar' && (
           <ExportarPanel ctx={ctx} onExportDxf={onExportDxf} onExportMetrado={onExportMetrado} busy={busy} exportMode={exportMode} setExportMode={setExportMode} exportOrder={exportOrder} setExportOrder={setExportOrder} />

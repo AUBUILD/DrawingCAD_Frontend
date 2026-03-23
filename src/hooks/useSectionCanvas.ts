@@ -127,8 +127,8 @@ export function useSectionCanvas({
       // Z1
       {
         const cfg = getBastonCfg(span, side, 'z1');
-        const q1 = Math.max(1, Math.min(3, Math.round(cfg.l1_qty ?? 1)));
-        const q2 = Math.max(1, Math.min(3, Math.round(cfg.l2_qty ?? 1)));
+        const q1 = Math.max(1, Math.min(3, Math.round(cfg.l1_qty ?? 1))) + Math.max(0, Math.round((cfg as any).l1_qty2 ?? 0));
+        const q2 = Math.max(1, Math.min(3, Math.round(cfg.l2_qty ?? 1))) + Math.max(0, Math.round((cfg as any).l2_qty2 ?? 0));
         if (cfg.l1_enabled || cfg.l2_enabled) {
           const L3_u = mToUnits(dev, resolvedLenM(span, cfg, 'L3_m', defaultL3M));
           const x1 = Math.min(xb, xa + L3_u);
@@ -141,8 +141,8 @@ export function useSectionCanvas({
       // Z2
       {
         const cfg = getBastonCfg(span, side, 'z2');
-        const q1 = Math.max(1, Math.min(3, Math.round(cfg.l1_qty ?? 1)));
-        const q2 = Math.max(1, Math.min(3, Math.round(cfg.l2_qty ?? 1)));
+        const q1 = Math.max(1, Math.min(3, Math.round(cfg.l1_qty ?? 1))) + Math.max(0, Math.round((cfg as any).l1_qty2 ?? 0));
+        const q2 = Math.max(1, Math.min(3, Math.round(cfg.l2_qty ?? 1))) + Math.max(0, Math.round((cfg as any).l2_qty2 ?? 0));
         if (cfg.l1_enabled || cfg.l2_enabled) {
           const L1_u = mToUnits(dev, resolvedLenM(span, cfg, 'L1_m', defaultLenM));
           const L2_u = mToUnits(dev, resolvedLenM(span, cfg, 'L2_m', defaultLenM));
@@ -158,8 +158,8 @@ export function useSectionCanvas({
       // Z3
       {
         const cfg = getBastonCfg(span, side, 'z3');
-        const q1 = Math.max(1, Math.min(3, Math.round(cfg.l1_qty ?? 1)));
-        const q2 = Math.max(1, Math.min(3, Math.round(cfg.l2_qty ?? 1)));
+        const q1 = Math.max(1, Math.min(3, Math.round(cfg.l1_qty ?? 1))) + Math.max(0, Math.round((cfg as any).l1_qty2 ?? 0));
+        const q2 = Math.max(1, Math.min(3, Math.round(cfg.l2_qty ?? 1))) + Math.max(0, Math.round((cfg as any).l2_qty2 ?? 0));
         if (cfg.l1_enabled || cfg.l2_enabled) {
           const L3_u = mToUnits(dev, resolvedLenM(span, cfg, 'L3_m', defaultL3M));
           const x0 = Math.max(xa, xb - L3_u);
@@ -184,6 +184,7 @@ export function useSectionCanvas({
         if (!res?.ok) continue;
 
         total += (res.main_bars_cm?.length ?? 0);
+        total += (res.main2_bars_cm?.length ?? 0);
 
         const active = activeBastonCountsAtX(si, span, xU, face);
         const l1PoolLen = (res.baston_l1_bars_cm?.length ?? 0);
@@ -407,8 +408,8 @@ export function useSectionCanvas({
       // Z1
       {
         const cfg = getBastonCfg(side, 'z1');
-        const q1 = Math.max(1, Math.min(3, Math.round(cfg.l1_qty ?? 1)));
-        const q2 = Math.max(1, Math.min(3, Math.round(cfg.l2_qty ?? 1)));
+        const q1 = Math.max(1, Math.min(3, Math.round(cfg.l1_qty ?? 1))) + Math.max(0, Math.round((cfg as any).l1_qty2 ?? 0));
+        const q2 = Math.max(1, Math.min(3, Math.round(cfg.l2_qty ?? 1))) + Math.max(0, Math.round((cfg as any).l2_qty2 ?? 0));
         if (cfg.l1_enabled || cfg.l2_enabled) {
           const L3_u = mToUnits(dev, resolvedLenM(cfg, 'L3_m', defaultL3M));
           const x1 = Math.min(xb, xa + L3_u);
@@ -421,8 +422,8 @@ export function useSectionCanvas({
       // Z2
       {
         const cfg = getBastonCfg(side, 'z2');
-        const q1 = Math.max(1, Math.min(3, Math.round(cfg.l1_qty ?? 1)));
-        const q2 = Math.max(1, Math.min(3, Math.round(cfg.l2_qty ?? 1)));
+        const q1 = Math.max(1, Math.min(3, Math.round(cfg.l1_qty ?? 1))) + Math.max(0, Math.round((cfg as any).l1_qty2 ?? 0));
+        const q2 = Math.max(1, Math.min(3, Math.round(cfg.l2_qty ?? 1))) + Math.max(0, Math.round((cfg as any).l2_qty2 ?? 0));
         if (cfg.l1_enabled || cfg.l2_enabled) {
           const L1_u = mToUnits(dev, resolvedLenM(cfg, 'L1_m', defaultLenM));
           const L2_u = mToUnits(dev, resolvedLenM(cfg, 'L2_m', defaultLenM));
@@ -438,8 +439,8 @@ export function useSectionCanvas({
       // Z3
       {
         const cfg = getBastonCfg(side, 'z3');
-        const q1 = Math.max(1, Math.min(3, Math.round(cfg.l1_qty ?? 1)));
-        const q2 = Math.max(1, Math.min(3, Math.round(cfg.l2_qty ?? 1)));
+        const q1 = Math.max(1, Math.min(3, Math.round(cfg.l1_qty ?? 1))) + Math.max(0, Math.round((cfg as any).l1_qty2 ?? 0));
+        const q2 = Math.max(1, Math.min(3, Math.round(cfg.l2_qty ?? 1))) + Math.max(0, Math.round((cfg as any).l2_qty2 ?? 0));
         if (cfg.l1_enabled || cfg.l2_enabled) {
           const L3_u = mToUnits(dev, resolvedLenM(cfg, 'L3_m', defaultL3M));
           const x0 = Math.max(xa, xb - L3_u);
@@ -465,6 +466,7 @@ export function useSectionCanvas({
       const activeL1 = Math.min(active.l1, l1Pool.length);
       const activeL2 = Math.min(active.l2, l2Pool.length);
       for (const p of res.main_bars_cm) pts.push({ ...p, db_cm: res.main_db_cm, fill: 'rgba(250, 204, 21, 0.95)' });
+      for (const p of (res.main2_bars_cm ?? [])) pts.push({ ...p, db_cm: res.main2_db_cm ?? res.main_db_cm, fill: 'rgba(251, 146, 60, 0.95)' });
       for (const p of l1Pool.slice(0, activeL1)) pts.push({ ...p, db_cm: res.baston_db_cm || res.main_db_cm, fill: 'rgba(34, 197, 94, 0.95)' });
       for (const p of l2Pool.slice(0, activeL2)) pts.push({ ...p, db_cm: res.baston_db_cm || res.main_db_cm, fill: 'rgba(6, 182, 212, 0.95)' });
     };

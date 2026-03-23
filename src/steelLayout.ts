@@ -24,8 +24,10 @@ export type SteelSpanFaceBarsResult = {
   s_min_cm: number;
   db_governing_cm: number;
   main_db_cm: number;
+  main2_db_cm: number;
   baston_db_cm: number;
   main_bars_cm: Array<{ y_cm: number; z_cm: number }>;
+  main2_bars_cm: Array<{ y_cm: number; z_cm: number }>;
   baston_pool_bars_cm: Array<{ y_cm: number; z_cm: number }>;
   // Pools por línea (para colorear/identidad estable). Si no se usan, baston_pool_bars_cm mantiene compatibilidad.
   baston_l1_bars_cm?: Array<{ y_cm: number; z_cm: number }>;
@@ -501,7 +503,7 @@ function normalizeBastonCfgLight(input: unknown): BastonCfg {
   const L2_m = typeof L2_m_raw === 'number' && Number.isFinite(L2_m_raw) && L2_m_raw > 0 ? L2_m_raw : undefined;
   const L3_m = typeof L3_m_raw === 'number' && Number.isFinite(L3_m_raw) && L3_m_raw > 0 ? L3_m_raw : undefined;
 
-  return {
+  const result: BastonCfg = {
     l1_enabled,
     l1_qty,
     l1_diameter,
@@ -515,6 +517,15 @@ function normalizeBastonCfgLight(input: unknown): BastonCfg {
     L2_m,
     L3_m,
   };
+  if (src.l1_qty2 != null && Number(src.l1_qty2) > 0) {
+    result.l1_qty2 = Number(src.l1_qty2);
+    result.l1_diameter2 = src.l1_diameter2 != null ? String(src.l1_diameter2) : l1_diameter;
+  }
+  if (src.l2_qty2 != null && Number(src.l2_qty2) > 0) {
+    result.l2_qty2 = Number(src.l2_qty2);
+    result.l2_diameter2 = src.l2_diameter2 != null ? String(src.l2_diameter2) : l2_diameter;
+  }
+  return result;
 }
 
 function bastonDemandForFace(
@@ -575,31 +586,37 @@ function bastonDemandForFace(
     if (!anyEnabled) continue;
 
     const q1 = Math.max(1, Math.min(3, Math.round(Number((cfg as any).l1_qty ?? 1) || 1)));
+    const q1_2 = Math.max(0, Math.round(Number((cfg as any).l1_qty2 ?? 0) || 0));
     const q2 = Math.max(1, Math.min(3, Math.round(Number((cfg as any).l2_qty ?? 1) || 1)));
+    const q2_2 = Math.max(0, Math.round(Number((cfg as any).l2_qty2 ?? 0) || 0));
     const db1 = diameterToCm(String((cfg as any).l1_diameter ?? '3/4'), settings);
+    const db1_2 = q1_2 > 0 ? diameterToCm(String((cfg as any).l1_diameter2 ?? (cfg as any).l1_diameter ?? '3/4'), settings) : 0;
     const db2 = diameterToCm(String((cfg as any).l2_diameter ?? '3/4'), settings);
+    const db2_2 = q2_2 > 0 ? diameterToCm(String((cfg as any).l2_diameter2 ?? (cfg as any).l2_diameter ?? '3/4'), settings) : 0;
     if (cfg.l1_enabled && Number.isFinite(db1) && db1 > 0) maxDb = Math.max(maxDb, db1);
+    if (cfg.l1_enabled && db1_2 > 0) maxDb = Math.max(maxDb, db1_2);
     if (cfg.l2_enabled && Number.isFinite(db2) && db2 > 0) maxDb = Math.max(maxDb, db2);
+    if (cfg.l2_enabled && db2_2 > 0) maxDb = Math.max(maxDb, db2_2);
 
     if (z === 'z1') {
       const L3 = resolvedLenM(cfg, 'L3_m', defaultL3M);
       if (cfg.l1_enabled) {
-        add(0, L3, q1); // línea exterior
-        addL1(0, L3, q1);
+        add(0, L3, q1 + q1_2); // línea exterior (incl. 2do diámetro)
+        addL1(0, L3, q1 + q1_2);
       }
       if (cfg.l2_enabled && L3 > bastonLcM + 1e-9) {
-        add(0, L3 - bastonLcM, q2); // línea interior
-        addL2(0, L3 - bastonLcM, q2);
+        add(0, L3 - bastonLcM, q2 + q2_2); // línea interior
+        addL2(0, L3 - bastonLcM, q2 + q2_2);
       }
     } else if (z === 'z3') {
       const L3 = resolvedLenM(cfg, 'L3_m', defaultL3M);
       if (cfg.l1_enabled) {
-        add(Lm - L3, Lm, q1);
-        addL1(Lm - L3, Lm, q1);
+        add(Lm - L3, Lm, q1 + q1_2);
+        addL1(Lm - L3, Lm, q1 + q1_2);
       }
       if (cfg.l2_enabled && L3 > bastonLcM + 1e-9) {
-        add(Lm - L3 + bastonLcM, Lm, q2);
-        addL2(Lm - L3 + bastonLcM, Lm, q2);
+        add(Lm - L3 + bastonLcM, Lm, q2 + q2_2);
+        addL2(Lm - L3 + bastonLcM, Lm, q2 + q2_2);
       }
     } else {
       const L1 = resolvedLenM(cfg, 'L1_m', defaultLenM);
@@ -608,12 +625,12 @@ function bastonDemandForFace(
       const b2 = Lm - L2;
       if (b2 > a + 1e-9) {
         if (cfg.l1_enabled) {
-          add(a, b2, q1);
-          addL1(a, b2, q1);
+          add(a, b2, q1 + q1_2);
+          addL1(a, b2, q1 + q1_2);
         }
         if (cfg.l2_enabled && b2 > a + 2 * bastonLcM + 1e-9) {
-          add(a + bastonLcM, b2 - bastonLcM, q2);
-          addL2(a + bastonLcM, b2 - bastonLcM, q2);
+          add(a + bastonLcM, b2 - bastonLcM, q2 + q2_2);
+          addL2(a + bastonLcM, b2 - bastonLcM, q2 + q2_2);
         }
       }
     }
@@ -669,16 +686,18 @@ export function computeSpanSectionLayoutWithBastonesCm(args: {
   const mainSteel = args.face === 'top' ? (args.span.steel_top ?? null) : (args.span.steel_bottom ?? null);
   const mainQty = Math.max(0, Math.floor(Number(mainSteel?.qty ?? 0) || 0));
   if (mainQty <= 0) return { ok: false, reason: 'Sin acero principal (qty<=0)' };
+  const mainQty2 = Math.max(0, Math.floor(Number(mainSteel?.qty2 ?? 0) || 0));
 
   const mainDb = diameterToCm(String(mainSteel?.diameter ?? '3/4'), settings);
+  const mainDb2 = mainQty2 > 0 ? diameterToCm(String(mainSteel?.diameter2 ?? mainSteel?.diameter ?? '3/4'), settings) : 0;
   const bastonDem = bastonDemandForFace(args.dev, args.span, args.face, settings);
   const bastonL1QtyRequested = bastonDem.qty_l1_max;
   const bastonL2QtyRequested = bastonDem.qty_l2_max;
   const bastonQtyRequested = Math.max(0, bastonL1QtyRequested + bastonL2QtyRequested);
   const bastonDb = bastonDem.db_max_cm;
 
-  const totalQtyRequested = mainQty + bastonQtyRequested;
-  const governingDb = Math.max(mainDb, bastonDb, mainDb);
+  const totalQtyRequested = mainQty + mainQty2 + bastonQtyRequested;
+  const governingDb = Math.max(mainDb, mainDb2, bastonDb);
   const sMin = e060SMinCm(governingDb, settings);
 
   // Vigueta: una sola fila y paquete centrado (main + bastones), sin separacion minima entre barras.
@@ -694,6 +713,9 @@ export function computeSpanSectionLayoutWithBastonesCm(args: {
     const main_bars_cm: Array<{ y_cm: number; z_cm: number }> = [];
     for (let i = 0; i < mainQty; i++) main_bars_cm.push(nextPt());
 
+    const main2_bars_cm: Array<{ y_cm: number; z_cm: number }> = [];
+    for (let i = 0; i < mainQty2; i++) main2_bars_cm.push(nextPt());
+
     const baston_l1_bars_cm: Array<{ y_cm: number; z_cm: number }> = [];
     for (let i = 0; i < bastonL1QtyRequested; i++) baston_l1_bars_cm.push(nextPt());
 
@@ -707,14 +729,17 @@ export function computeSpanSectionLayoutWithBastonesCm(args: {
       s_min_cm: 0,
       db_governing_cm: governingDb,
       main_db_cm: mainDb,
+      main2_db_cm: mainDb2,
       baston_db_cm: bastonDb,
       main_bars_cm,
+      main2_bars_cm,
       baston_pool_bars_cm: [...baston_l1_bars_cm, ...baston_l2_bars_cm],
       baston_l1_bars_cm,
       baston_l2_bars_cm,
       debug: {
         member_type: 'vigueta',
         mainQty,
+        mainQty2,
         bastonL1Qty_requested: bastonL1QtyRequested,
         bastonL2Qty_requested: bastonL2QtyRequested,
         totalQty_requested: totalQtyRequested,
@@ -771,7 +796,7 @@ export function computeSpanSectionLayoutWithBastonesCm(args: {
       // Capacidad total. Como los bastones pueden rellenar huecos en filas ya usadas
       // (incluida la primera fila), el criterio factible es por capacidad.
       const capacity = rows * cols;
-      if (capacity >= (mainQty + bastonQtyRequested)) candidates.push({ rows, cols, dx });
+      if (capacity >= (mainQty + mainQty2 + bastonQtyRequested)) candidates.push({ rows, cols, dx });
     }
 
     // optimización: si encontramos con 1 o 2 filas, parar temprano
@@ -808,18 +833,34 @@ export function computeSpanSectionLayoutWithBastonesCm(args: {
   };
 
   const main_bars_cm: Array<{ y_cm: number; z_cm: number }> = [];
+  const main2_bars_cm: Array<{ y_cm: number; z_cm: number }> = [];
   const baston_l1_bars_cm: Array<{ y_cm: number; z_cm: number }> = [];
   const baston_l2_bars_cm: Array<{ y_cm: number; z_cm: number }> = [];
 
   const occupied = new Array(rows * cols).fill(false);
   const keyOf = (r: number, c: number) => r * cols + c;
 
-  // Main: desde fila 0
+  // Main (1er diámetro): desde fila 0
   {
     let remaining = mainQty;
     for (const s of slotIter(0, rows)) {
       if (remaining <= 0) break;
       main_bars_cm.push({
+        y_cm: yForRowCm(args.face, h_cm, cover_eff_cm, governingDb, sMin, s.r),
+        z_cm: zs[s.c] ?? 0,
+      });
+      occupied[keyOf(s.r, s.c)] = true;
+      remaining--;
+    }
+  }
+
+  // Main2 (2do diámetro): continúa llenando desde los huecos restantes
+  {
+    let remaining = mainQty2;
+    for (const s of slotIter(0, rows)) {
+      if (remaining <= 0) break;
+      if (occupied[keyOf(s.r, s.c)]) continue;
+      main2_bars_cm.push({
         y_cm: yForRowCm(args.face, h_cm, cover_eff_cm, governingDb, sMin, s.r),
         z_cm: zs[s.c] ?? 0,
       });
@@ -862,19 +903,22 @@ export function computeSpanSectionLayoutWithBastonesCm(args: {
     s_min_cm: sMin,
     db_governing_cm: governingDb,
     main_db_cm: mainDb,
+    main2_db_cm: mainDb2,
     baston_db_cm: bastonDb,
     main_bars_cm,
+    main2_bars_cm,
     baston_pool_bars_cm,
     baston_l1_bars_cm,
     baston_l2_bars_cm,
     debug: {
       mainQty,
+      mainQty2,
       bastonQty_requested: bastonQtyRequested,
       bastonL1Qty_requested: bastonL1QtyRequested,
       bastonL2Qty_requested: bastonL2QtyRequested,
       bastonQty_used: bastonQtyUsed,
       totalQty_requested: totalQtyRequested,
-      totalQty_used: mainQty + bastonQtyUsed,
+      totalQty_used: mainQty + mainQty2 + bastonQtyUsed,
       mainRowsUsed,
         stirrups_section_thickness_cm: stirrupsThicknessCm,
         cover_cm_effective: cover_eff_cm,

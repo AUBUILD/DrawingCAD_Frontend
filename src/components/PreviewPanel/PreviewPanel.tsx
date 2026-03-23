@@ -301,7 +301,7 @@ const PreviewPanelInner: React.FC<PreviewPanelProps> = ({
             {previewView === '3d' ? <div ref={threeHostRef} className="canvas3d detailCanvas3d" /> : null}
           </div>
 
-          {previewView === '2d' && steelViewActive ? (
+          {preview && previewView === '2d' && steelViewActive ? (
             <div style={{ flex: '1 1 0%', minWidth: 240, maxWidth: 360, display: 'flex', flexDirection: 'column', gap: 8 }}>
               <div className="rowBetween" style={{ gap: 8 }}>
                 <div className="mutedSmall">Sección (corte en desarrollo)</div>
@@ -408,7 +408,7 @@ const PreviewPanelInner: React.FC<PreviewPanelProps> = ({
             <span className="mono">Nodes:</span> {(dev.nodes ?? []).length}
           </div>
         </div>
-        {!preview ? <div className="mutedSmall">Sin preview (revisa backend).</div> : null}
+        {!preview ? <div className="mutedSmall">Seleccione una viga para ver la vista previa.</div> : null}
       </section>
     </div>
   );

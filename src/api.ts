@@ -1,6 +1,8 @@
 import type {
   BackendAppConfig,
   ExportDxfRequest,
+  ForceImportResponse,
+  ForceImportTarget,
   ImportDxfBatchResponse,
   ImportDxfResponse,
   PreviewRequest,
@@ -16,8 +18,7 @@ function normalizeBaseUrl(raw: unknown): string {
 
 // Prod on Render: set VITE_API_URL to your backend base (e.g. https://beamdraw-backend.onrender.com)
 // Back-compat: accept VITE_API_BASE from older docs.
-const ENV = (import.meta as any).env ?? {};
-const BASE = normalizeBaseUrl(ENV.VITE_API_URL ?? ENV.VITE_API_BASE ?? '');
+const BASE = normalizeBaseUrl(import.meta.env.VITE_API_URL ?? import.meta.env.VITE_API_BASE ?? '');
 
 let AUTH_TOKEN = '';
 
@@ -299,7 +300,15 @@ export async function saveState(payload: PreviewRequest, opts?: SaveLoadOpts): P
 export async function importDxf(file: File): Promise<ImportDxfResponse> {
   const fd = new FormData();
   fd.append('file', file);
-  const res = await fetch(`${BASE}/api/import-dxf`, { method: 'POST', body: fd });
+  let res: Response;
+  try {
+    res = await fetch(`${BASE}/api/import-dxf`, { method: 'POST', body: fd });
+  } catch {
+    throw new Error(
+      'No se pudo conectar al servidor para importar DXF. '
+      + (BASE ? `Verifica que el backend (${BASE}) este activo.` : 'VITE_API_URL no esta configurado.')
+    );
+  }
   if (!res.ok) return parseError(res);
   return res.json();
 }
@@ -309,12 +318,44 @@ export async function importDxfBatch(file: File, orderBy: 'name' | 'location' = 
   fd.append('file', file);
   const q = new URLSearchParams();
   q.set('order_by', orderBy);
-  const res = await fetch(`${BASE}/api/import-dxf-batch?${q.toString()}`, {
+  let res: Response;
+  try {
+    res = await fetch(`${BASE}/api/import-dxf-batch?${q.toString()}`, {
+      method: 'POST',
+      body: fd,
+    });
+  } catch {
+    throw new Error(
+      'No se pudo conectar al servidor para importar DXF batch. '
+      + (BASE ? `Verifica que el backend (${BASE}) este activo.` : 'VITE_API_URL no esta configurado.')
+    );
+  }
+  if (!res.ok) return parseError(res);
+  return res.json();
+}
+
+async function importForces(
+  path: string,
+  file: File,
+  targets: ForceImportTarget[],
+): Promise<ForceImportResponse> {
+  const fd = new FormData();
+  fd.append('file', file);
+  fd.append('payload', JSON.stringify({ targets }));
+  const res = await fetch(`${BASE}${path}`, {
     method: 'POST',
     body: fd,
   });
   if (!res.ok) return parseError(res);
   return res.json();
+}
+
+export async function importDesignForcesBatch(file: File, targets: ForceImportTarget[]): Promise<ForceImportResponse> {
+  return importForces('/api/design/import-forces/batch', file, targets);
+}
+
+export async function importDesignForcesGroup(file: File, target: ForceImportTarget): Promise<ForceImportResponse> {
+  return importForces('/api/design/import-forces/group', file, [target]);
 }
 
 export async function uploadTemplateDxf(file: File): Promise<TemplateDxfInfo> {

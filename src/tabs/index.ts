@@ -4,3 +4,7 @@ export { ConcreteTab, type ConcreteTabProps } from './ConcreteTab';
 export { SteelTab, type SteelTabProps } from './SteelTab';
 export { MetradoTab, type MetradoTabProps } from './MetradoTab';
 export { JsonTab, type JsonTabProps } from './JsonTab';
+export { ParametrizationTab, type ParametrizationTabProps } from './ParametrizationTab';
+export { DesignTab, type DesignTabProps } from './DesignTab';
+export { DEFAULT_DESIGN_CONFIG } from './DesignTab';
+export type { DesignConfig, DesignEngine, DesignResult, DesignRunResponse } from './DesignTab';

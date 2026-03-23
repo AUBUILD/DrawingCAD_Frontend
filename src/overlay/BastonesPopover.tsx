@@ -86,6 +86,40 @@ export const SpanBastonesPopover: React.FC<SpanBastonesProps> = ({
           </>
         )}
       </div>
+      {l1Enabled && (cfg.l1_qty2 ?? 0) > 0 && (
+        <div className="soRow" style={{ paddingLeft: 48 }}>
+          <input
+            className="soInput soInput--sm"
+            type="number" min={1} max={5} step={1}
+            value={cfg.l1_qty2 ?? 1}
+            onChange={(e) => onUpdateBaston(spanIdx, side, zone, { l1_qty2: Math.max(1, Number(e.target.value) || 1) })}
+            title="Cantidad 2"
+          />
+          <select
+            className="soSelect"
+            value={cfg.l1_diameter2 ?? '5/8'}
+            onChange={(e) => onUpdateBaston(spanIdx, side, zone, { l1_diameter2: e.target.value })}
+          >
+            {DIAMETERS.map((d) => <option key={d} value={d}>{d}"</option>)}
+          </select>
+        </div>
+      )}
+      {l1Enabled && (
+        <label className="soCheck" style={{ paddingLeft: 48, marginTop: 1 }}>
+          <input
+            type="checkbox"
+            checked={(cfg.l1_qty2 ?? 0) > 0}
+            onChange={(e) => {
+              if (e.target.checked) {
+                onUpdateBaston(spanIdx, side, zone, { l1_qty2: 1, l1_diameter2: cfg.l1_diameter ?? '5/8' });
+              } else {
+                onUpdateBaston(spanIdx, side, zone, { l1_qty2: 0, l1_diameter2: undefined });
+              }
+            }}
+          />
+          <span>Agregar diametro</span>
+        </label>
+      )}
 
       {/* Line 2 (inner) */}
       <div className="soRow">
@@ -116,6 +150,40 @@ export const SpanBastonesPopover: React.FC<SpanBastonesProps> = ({
           </>
         )}
       </div>
+      {l2Enabled && (cfg.l2_qty2 ?? 0) > 0 && (
+        <div className="soRow" style={{ paddingLeft: 48 }}>
+          <input
+            className="soInput soInput--sm"
+            type="number" min={1} max={5} step={1}
+            value={cfg.l2_qty2 ?? 1}
+            onChange={(e) => onUpdateBaston(spanIdx, side, zone, { l2_qty2: Math.max(1, Number(e.target.value) || 1) })}
+            title="Cantidad 2"
+          />
+          <select
+            className="soSelect"
+            value={cfg.l2_diameter2 ?? '5/8'}
+            onChange={(e) => onUpdateBaston(spanIdx, side, zone, { l2_diameter2: e.target.value })}
+          >
+            {DIAMETERS.map((d) => <option key={d} value={d}>{d}"</option>)}
+          </select>
+        </div>
+      )}
+      {l2Enabled && (
+        <label className="soCheck" style={{ paddingLeft: 48, marginTop: 1 }}>
+          <input
+            type="checkbox"
+            checked={(cfg.l2_qty2 ?? 0) > 0}
+            onChange={(e) => {
+              if (e.target.checked) {
+                onUpdateBaston(spanIdx, side, zone, { l2_qty2: 1, l2_diameter2: cfg.l2_diameter ?? '5/8' });
+              } else {
+                onUpdateBaston(spanIdx, side, zone, { l2_qty2: 0, l2_diameter2: undefined });
+              }
+            }}
+          />
+          <span>Agregar diametro</span>
+        </label>
+      )}
 
       {/* Lengths (only Z2 has L1_m/L2_m, Z1/Z3 have L3_m) */}
       {l1Enabled || l2Enabled ? (

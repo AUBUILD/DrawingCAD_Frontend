@@ -36,6 +36,7 @@ import { Button, Card, CardContent, CardHeader, CardTitle, Input, Label } from '
 import { TopNavbar } from './components/layout/TopNavbar';
 import { LeftSidebar } from './components/layout/LeftSidebar';
 import type { EditorTabProps } from './components/DrawBeamPanel';
+import { computeParamHash, runDesignApi } from './tabs/DesignTab/designMappers';
 
 type Tab = 'config' | 'proyecto' | 'concreto' | 'acero' | 'metrado' | 'json';
 type PreviewView = '2d' | '3d';
@@ -241,6 +242,7 @@ export default function App() {
 
   const [jsonText, setJsonText] = useState(() => toJson(toBackendPayload(defaultDevelopment(DEFAULT_APP_CFG))));
   const [preview, setPreview] = useState<PreviewResponse | null>(null);
+  const [panelView, setPanelView] = useState<string>('vigas');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [warning, setWarning] = useState<string | null>(null);
@@ -397,6 +399,7 @@ export default function App() {
   useEffect(() => { tabRef.current = tab; }, [tab]);
   useEffect(() => { setEditorOpen(false); }, [tab]);
   useEffect(() => { setDev((prev) => normalizeDev(prev, appCfg)); }, [appCfg]);
+  useEffect(() => { if (panelView !== 'editar') { setPreview(null); } }, [panelView]);
 
   useEffect(() => {
     if (steelLayoutDraftDirtyRef.current) return;
@@ -430,7 +433,7 @@ export default function App() {
 
   const {
     handleSaveManual, clearDevelopment, onExportDxf, onExportMetrado,
-    onUploadTemplate, onClearTemplate, onImportDxfFile, onImportDxfBatchFile, applyJsonToForm,
+    onUploadTemplate, onClearTemplate, onImportDxfFile, onImportDxfBatchFile, onImportForcesGroupFile, onImportForcesBatchFile, applyJsonToForm,
   } = useApiActions({
     dev, developments, exportMode, setExportMode, exportOrder, setDev, setDevelopments, setActiveDevIdx, appCfg, setAppCfg,
     payload, savedCuts, cascoLayer, steelLayer, drawSteel, defaultPref,
@@ -825,16 +828,19 @@ export default function App() {
     setDetailViewport(null);
   }, [developments, appCfg]);
 
-  /** When a beam group is selected in DrawBeamPanel, load its stored development into the editor. */
+  /** When a beam group is selected in DrawBeamPanel, load its stored development into the editor.
+   *  When groupDev is undefined (deselected / deleted), clear the preview. */
   const onGroupDevelopmentLoad = useCallback((groupDev: DevelopmentIn | undefined) => {
     if (groupDev) {
       setDevelopments((prev) => {
         const copy = [...prev];
-        copy[activeDevIdx] = groupDev;
+        copy[activeDevIdx] = normalizeDev(groupDev, appCfg);
         return copy;
       });
+    } else {
+      setPreview(null);
     }
-  }, [activeDevIdx]);
+  }, [activeDevIdx, appCfg]);
 
   const onToggleTwin = useCallback(() => {
     const current = developments[activeDevIdx];
@@ -1191,6 +1197,11 @@ export default function App() {
         setSelection({ kind: 'span', index: spanIdx });
       },
     },
+    designTabProps: {
+      dev,
+      paramHash: computeParamHash(dev),
+      onRunDesign: runDesignApi,
+    },
     jsonTabProps: { jsonText, setJsonText, onApply: applyJsonToForm },
   };
 
@@ -1200,6 +1211,7 @@ export default function App() {
         sideOpen={sideOpen}
         setSideOpen={setSideOpen}
         beamCode={variantScope.beam_code || dev.name}
+        projectName={variantScope.project_name}
         userEmail={authEmail}
         onOpenProjects={() => { void refreshProjects(); setWorkspaceView('launcher'); }}
         onLogout={onLogout}
@@ -1217,8 +1229,9 @@ export default function App() {
           activeDevelopment={dev}
           onGroupDevelopmentLoad={onGroupDevelopmentLoad}
           onEditorTabChange={(t) => {
-            const valid: Tab[] = ['config', 'concreto', 'acero', 'metrado', 'json'];
-            if (valid.includes(t as Tab)) setTab(t as Tab);
+            const map: Record<string, Tab> = { parametrizacion: 'concreto', concreto: 'concreto', acero: 'acero', diseno: 'concreto', metrado: 'metrado', json: 'json', config: 'config' };
+            const mapped = map[t];
+            if (mapped) setTab(mapped);
           }}
           exportMode={exportMode}
           setExportMode={setExportMode}
@@ -1226,9 +1239,12 @@ export default function App() {
           setExportOrder={setExportOrder}
           onImportDxfFile={onImportDxfFile}
           onImportDxfBatchFile={onImportDxfBatchFile}
+          onImportForcesBatchFile={onImportForcesBatchFile}
+          onImportForcesGroupFile={onImportForcesGroupFile}
           batchImportOrder={batchImportOrder}
           setBatchImportOrder={setBatchImportOrder}
           onAllGroupDevsChange={setAllGroupDevs}
+          onPanelViewChange={setPanelView}
         />
         {sideOpen ? (
           <div

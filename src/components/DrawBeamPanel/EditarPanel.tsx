@@ -1,16 +1,17 @@
-import React, { useState } from 'react';
+import React, { useMemo, useState } from 'react';
 import { C, NIVEL_COLOR, ORDINALS, ordIdx } from '../shared/tokens';
 import { Icon } from '../shared/Icon';
 import type { Ordinal } from '../shared/tokens';
 import type { useBeams } from './useBeams';
 import type { EditorTabProps } from './editorTabProps';
+import type { DevelopmentIn, ForceImportResponse, ForceImportTarget } from '../../types';
 
-import { ConcreteTab } from '../../tabs/ConcreteTab';
-import { SteelTab } from '../../tabs/SteelTab';
 import { MetradoTab } from '../../tabs/MetradoTab';
 import { JsonTab } from '../../tabs/JsonTab';
+import { ParametrizationTab } from '../../tabs/ParametrizationTab';
+import { DesignTab } from '../../tabs/DesignTab';
 
-type EditTab = 'grupos' | 'concreto' | 'acero' | 'metrado' | 'json';
+type EditTab = 'grupos' | 'parametrizacion' | 'diseno' | 'metrado' | 'json';
 
 const S = {
   header: {
@@ -99,17 +100,31 @@ interface EditarPanelProps {
   ctx: ReturnType<typeof useBeams>;
   editorTabProps: EditorTabProps;
   onEditorTabChange?: (tab: string) => void;
+  onImportForcesGroupFile?: (file: File, target: ForceImportTarget) => Promise<ForceImportResponse>;
+  onGroupDevelopmentLoad?: (dev: DevelopmentIn | undefined) => void;
 }
 
-const TABS: Array<{ key: EditTab; label: string; icon: 'layers' | 'beam' | 'vigas' | 'table' | 'cfg' }> = [
-  { key: 'grupos',   label: 'Grupos', icon: 'layers' },
-  { key: 'concreto', label: 'Concreto', icon: 'beam' },
-  { key: 'acero',    label: 'Acero', icon: 'vigas' },
-  { key: 'metrado',  label: 'Metrado', icon: 'table' },
-  { key: 'json',     label: 'JSON', icon: 'cfg' },
+const TABS: Array<{ key: EditTab; label: string; icon: 'layers' | 'beam' | 'vigas' | 'table' | 'cfg' | 'section' | 'edit' }> = [
+  { key: 'grupos',           label: 'Grupos',           icon: 'layers' },
+  { key: 'parametrizacion',  label: 'Parametrizacion',  icon: 'beam' },
+  { key: 'diseno',           label: 'Diseno',           icon: 'section' },
+  { key: 'metrado',          label: 'Metrado',          icon: 'table' },
+  { key: 'json',             label: 'JSON',             icon: 'cfg' },
 ];
 
-export const EditarPanel: React.FC<EditarPanelProps> = ({ ctx, editorTabProps, onEditorTabChange }) => {
+const LEVEL_TYPE_MAP: Record<string, string> = { Piso: 'piso', 'Sótano': 'sotano', Azotea: 'azotea' };
+
+function syncDevMeta(dev: DevelopmentIn, beam: any, group: any): DevelopmentIn {
+  return {
+    ...dev,
+    name: beam.id ?? dev.name,
+    floor_start: group.nivelInicial ?? dev.floor_start,
+    floor_end: group.nivelFinal ?? dev.floor_end,
+    level_type: (LEVEL_TYPE_MAP[beam.type] ?? dev.level_type ?? 'piso') as DevelopmentIn['level_type'],
+  };
+}
+
+export const EditarPanel: React.FC<EditarPanelProps> = ({ ctx, editorTabProps, onEditorTabChange, onImportForcesGroupFile, onGroupDevelopmentLoad }) => {
   const [tab, setTabRaw] = useState<EditTab>('grupos');
   const setTab = (t: EditTab) => { setTabRaw(t); onEditorTabChange?.(t); };
   const [iniDraft, setIniDraft] = useState<Ordinal>(ORDINALS[0]);
@@ -120,12 +135,40 @@ export const EditarPanel: React.FC<EditarPanelProps> = ({ ctx, editorTabProps, o
 
   const color = NIVEL_COLOR[beam.type];
 
-  const finOpts = ORDINALS.filter((o) => ordIdx(o) > ordIdx(iniDraft));
+  const finOpts = ORDINALS.filter((o) => ordIdx(o) >= ordIdx(iniDraft));
 
   const [overlapWarning, setOverlapWarning] = useState(false);
 
+  const handleImportForcesGroup = async (file: File) => {
+    if (!onImportForcesGroupFile) {
+      throw new Error('La importacion de fuerzas por grupo no esta disponible en este flujo.');
+    }
+    const group = ctx.selectedGroup;
+    const designProps = editorTabProps.designTabProps;
+    if (!group || !designProps) {
+      throw new Error('No hay un grupo activo para importar fuerzas.');
+    }
+    const sourceDev = syncDevMeta(designProps.dev, beam, group);
+    const target: ForceImportTarget = {
+      beam_id: beam.id,
+      group_id: group.id,
+      beam_type: beam.type,
+      floor_start: group.nivelInicial,
+      floor_end: group.nivelFinal,
+      excluded_levels: group.excludedLevels ?? [],
+      development: sourceDev,
+    };
+    const response = await onImportForcesGroupFile(file, target);
+    const updated = response.results.find((result) => result.matched && result.group_id === group.id && result.development);
+    if (updated?.development) {
+      ctx.applyGroupDevelopments([{ beamId: beam.id, groupId: group.id, development: updated.development }]);
+      onGroupDevelopmentLoad?.(updated.development);
+    }
+    return response;
+  };
+
   const handleAddGroup = () => {
-    if (ordIdx(finDraft) <= ordIdx(iniDraft)) return;
+    if (ordIdx(finDraft) < ordIdx(iniDraft)) return;
     const result = ctx.addGroup(beam.id, iniDraft, finDraft);
     if (result === null) {
       setOverlapWarning(true);
@@ -139,9 +182,6 @@ export const EditarPanel: React.FC<EditarPanelProps> = ({ ctx, editorTabProps, o
     <>
       {/* Header: back + beam title */}
       <div style={S.header}>
-        <button type="button" style={S.backBtn} onClick={() => ctx.setView('vigas')}>
-          <Icon name="arrow" size={16} color={C.sub} />
-        </button>
         <span style={{ ...S.beamTitle, color }}>{beam.id}</span>
         <span style={{ fontSize: 11, color: C.sub }}>{beam.type}</span>
       </div>
@@ -165,28 +205,48 @@ export const EditarPanel: React.FC<EditarPanelProps> = ({ ctx, editorTabProps, o
             <div style={S.empty}>Sin agrupaciones. Agrega un rango de pisos.</div>
           )}
 
-          {beam.groups.map((g) => (
-            <div
-              key={g.id}
-              style={S.groupCard(g.id === ctx.selectedGroupId)}
-              onClick={() => ctx.setSelectedGroupId(g.id)}
-              role="button"
-              tabIndex={0}
-              onKeyDown={(e) => { if (e.key === 'Enter') ctx.setSelectedGroupId(g.id); }}
-            >
-              <Icon name="layers" size={14} color={color} />
-              <span style={S.groupLabel}>
-                {g.nivelInicial} — {g.nivelFinal}
-              </span>
-              <button
-                type="button"
-                style={{ background: 'transparent', border: 'none', cursor: 'pointer', padding: 2 }}
-                onClick={(e) => { e.stopPropagation(); ctx.deleteGroup(beam.id, g.id); }}
-              >
-                <Icon name="close" size={12} color={C.red} />
-              </button>
-            </div>
-          ))}
+          {beam.groups.map((g) => {
+            const isSelected = g.id === ctx.selectedGroupId;
+            const excl = g.excludedLevels ?? [];
+            const exclLabel = excl.length > 0 ? ` (exc: ${excl.join(', ')})` : '';
+            return (
+              <div key={g.id}>
+                <div
+                  style={S.groupCard(isSelected)}
+                  onClick={() => ctx.setSelectedGroupId(g.id)}
+                  role="button"
+                  tabIndex={0}
+                  onKeyDown={(e) => { if (e.key === 'Enter') ctx.setSelectedGroupId(g.id); }}
+                >
+                  <Icon name="layers" size={14} color={color} />
+                  <span style={S.groupLabel}>
+                    {g.nivelInicial} — {g.nivelFinal}
+                    {exclLabel && <span style={{ fontSize: 9, color: C.dim }}>{exclLabel}</span>}
+                  </span>
+                  <button
+                    type="button"
+                    style={{ background: 'transparent', border: 'none', cursor: 'pointer', padding: 2 }}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      const ok = window.confirm(`Se eliminara el grupo "${g.nivelInicial} — ${g.nivelFinal}".\n\nDeseas continuar?`);
+                      if (!ok) return;
+                      ctx.deleteGroup(beam.id, g.id);
+                    }}
+                  >
+                    <Icon name="close" size={12} color={C.red} />
+                  </button>
+                </div>
+                {/* Inline excluded floors editor when group is selected */}
+                {isSelected && (
+                  <ExcludedFloorsEditor
+                    group={g}
+                    color={color}
+                    onUpdate={(newExcl) => ctx.updateGroup(beam.id, g.id, { excludedLevels: newExcl.length > 0 ? newExcl : undefined })}
+                  />
+                )}
+              </div>
+            );
+          })}
 
           <div style={S.addRow}>
             <label>
@@ -197,13 +257,12 @@ export const EditarPanel: React.FC<EditarPanelProps> = ({ ctx, editorTabProps, o
                 onChange={(e) => {
                   const v = e.target.value as Ordinal;
                   setIniDraft(v);
-                  if (ordIdx(finDraft) <= ordIdx(v)) {
-                    const nextValid = ORDINALS.find((o) => ordIdx(o) > ordIdx(v));
-                    if (nextValid) setFinDraft(nextValid);
+                  if (ordIdx(finDraft) < ordIdx(v)) {
+                    setFinDraft(v);
                   }
                 }}
               >
-                {ORDINALS.slice(0, -1).map((o) => (
+                {ORDINALS.map((o) => (
                   <option key={o} value={o}>{o}</option>
                 ))}
               </select>
@@ -231,10 +290,84 @@ export const EditarPanel: React.FC<EditarPanelProps> = ({ ctx, editorTabProps, o
       )}
 
       {/* Existing editor tabs — rendered inline */}
-      {tab === 'concreto'  && <ConcreteTab {...editorTabProps.concreteTabProps} />}
-      {tab === 'acero'     && <SteelTab    {...editorTabProps.steelTabProps} />}
+      {tab === 'parametrizacion' && (
+        <ParametrizationTab
+          concreteTabProps={editorTabProps.concreteTabProps}
+          steelTabProps={editorTabProps.steelTabProps}
+          onInnerTabChange={(innerTab) => onEditorTabChange?.(innerTab)}
+        />
+      )}
+      {tab === 'diseno' && editorTabProps.designTabProps && (
+        <DesignTab {...editorTabProps.designTabProps} onImportForcesGroup={handleImportForcesGroup} />
+      )}
       {tab === 'metrado'   && <MetradoTab  {...editorTabProps.metradoTabProps} />}
       {tab === 'json'      && <JsonTab     {...editorTabProps.jsonTabProps} />}
     </>
+  );
+};
+
+/** Inline editor to toggle excluded floors within a group range. */
+const ExcludedFloorsEditor: React.FC<{
+  group: import('./types').GrupoViga;
+  color: string;
+  onUpdate: (excl: Ordinal[]) => void;
+}> = ({ group, color, onUpdate }) => {
+  const floors = useMemo(() => {
+    const result: Ordinal[] = [];
+    const ini = ordIdx(group.nivelInicial);
+    const fin = ordIdx(group.nivelFinal);
+    // Only show interior floors (first and last are always included)
+    for (let i = ini + 1; i < fin; i++) {
+      result.push(ORDINALS[i]);
+    }
+    return result;
+  }, [group.nivelInicial, group.nivelFinal]);
+
+  if (floors.length === 0) return null;
+
+  const exclSet = new Set(group.excludedLevels ?? []);
+
+  return (
+    <div style={{
+      padding: '4px 8px 6px',
+      marginBottom: 3,
+      background: 'rgba(0,0,0,0.15)',
+      borderRadius: '0 0 5px 5px',
+      borderTop: 'none',
+    }}>
+      <div style={{ fontSize: 9, color: C.dim, marginBottom: 3, textTransform: 'uppercase', letterSpacing: 0.5 }}>
+        Excluir pisos
+      </div>
+      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 3 }}>
+        {floors.map((f) => {
+          const excluded = exclSet.has(f);
+          return (
+            <button
+              key={f}
+              type="button"
+              onClick={() => {
+                const next = excluded
+                  ? [...exclSet].filter((x) => x !== f)
+                  : [...exclSet, f];
+                onUpdate(next as Ordinal[]);
+              }}
+              style={{
+                padding: '2px 6px',
+                fontSize: 10,
+                fontWeight: 600,
+                border: `1px solid ${excluded ? C.red + '88' : color + '44'}`,
+                borderRadius: 4,
+                background: excluded ? C.red + '22' : 'transparent',
+                color: excluded ? C.red : C.sub,
+                cursor: 'pointer',
+                textDecoration: excluded ? 'line-through' : 'none',
+              }}
+            >
+              {f}
+            </button>
+          );
+        })}
+      </div>
+    </div>
   );
 };

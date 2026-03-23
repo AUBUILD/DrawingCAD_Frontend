@@ -290,6 +290,7 @@ export function useThreeScene({
     try {
       const steelMats = createSteelMaterials();
       const steelMat = steelMats.main;
+      const steelMat2 = steelMats.main2;
       const bastonL1Mat = steelMats.bastonL1;
       const bastonL2Mat = steelMats.bastonL2;
       const extraMat = steelMats.extra;
@@ -450,12 +451,49 @@ export function useThreeScene({
             }
           }
 
+          // Acero principal 2do diámetro: mismas terminaciones que el 1er diámetro
+          if (res.main2_bars_cm.length > 0 && res.main2_db_cm > 0) {
+            const main2RadiusU = mToUnits(dev, (res.main2_db_cm / 100) / 2);
+            const diaKey2 = String((mainSteel as any)?.diameter2 ?? (mainSteel as any)?.diameter ?? '3/4');
+            for (const b of res.main2_bars_cm) {
+              const yU = yBaseU + mToUnits(dev, b.y_cm / 100);
+              const zU = mToUnits(dev, b.z_cm / 100);
+              addXSegment(xaSide, xbSide, yU, zU, main2RadiusU, steelMat2);
+
+              if (leftKind === 'hook' || leftKind === 'development') {
+                const kind2 = leftKind === 'hook' ? 'hook' : 'anchorage';
+                const customLengthField = face === 'top' ? 'steel_top_2_anchorage_length' : 'steel_bottom_2_anchorage_length';
+                const customLength = nL ? (nL as any)[customLengthField] : undefined;
+                const x2 = computeEndX2(xaSide, -1, diaKey2, kind2, face, xFaceLeft, customLength);
+                addXSegment(x2, xaSide, yU, zU, main2RadiusU, extraMat);
+                if (leftKind === 'hook') {
+                  const y2 = face === 'top' ? yU - hookLegU : yU + hookLegU;
+                  addYSegment(x2, yU, y2, zU, main2RadiusU, extraMat);
+                }
+              }
+
+              if (rightKind === 'hook' || rightKind === 'development') {
+                const kind2 = rightKind === 'hook' ? 'hook' : 'anchorage';
+                const customLengthField = face === 'top' ? 'steel_top_1_anchorage_length' : 'steel_bottom_1_anchorage_length';
+                const customLength = nR ? (nR as any)[customLengthField] : undefined;
+                const x2 = computeEndX2(xbSide, +1, diaKey2, kind2, face, xFaceRight, customLength);
+                addXSegment(xbSide, x2, yU, zU, main2RadiusU, extraMat);
+                if (rightKind === 'hook') {
+                  const y2 = face === 'top' ? yU - hookLegU : yU + hookLegU;
+                  addYSegment(x2, yU, y2, zU, main2RadiusU, extraMat);
+                }
+              }
+            }
+          }
+
           // Bastones: segmentos por zonas.
           if (!showBastones) return;
           const l1Pool = (res as any).baston_l1_bars_cm ?? [];
           const l2Pool = (res as any).baston_l2_bars_cm ?? [];
           if (!((l1Pool.length + l2Pool.length) > 0) || !(res.baston_db_cm > 0)) return;
           const bastonRadiusU = mToUnits(dev, (res.baston_db_cm / 100) / 2);
+          const bastonSettings = getSteelLayoutSettings(dev);
+          const bastonRadiusFor = (dia: string) => mToUnits(dev, (diameterToCm(dia, bastonSettings) / 100) / 2);
 
           const side: 'top' | 'bottom' = face;
 
@@ -464,7 +502,9 @@ export function useThreeScene({
             const cfg = getBastonCfg3D(side, 'z1');
             if (cfg.l1_enabled || cfg.l2_enabled) {
               const q1 = Math.max(1, Math.min(3, Math.round(cfg.l1_qty ?? 1)));
+              const q1_2 = Math.max(0, Math.round((cfg as any).l1_qty2 ?? 0));
               const q2 = Math.max(1, Math.min(3, Math.round(cfg.l2_qty ?? 1)));
+              const q2_2 = Math.max(0, Math.round((cfg as any).l2_qty2 ?? 0));
 
               const L3_u = mToUnits(dev, resolvedLenM(cfg, 'L3_m', defaultL3M));
               const x0z = xaSide;
@@ -472,17 +512,32 @@ export function useThreeScene({
               const innerExists = x1z - x0z > bastonLcU + 1e-6;
 
               const l1Bars = cfg.l1_enabled ? l1Pool.slice(0, q1) : [];
+              const l1Bars2 = cfg.l1_enabled && q1_2 > 0 ? l1Pool.slice(q1, q1 + q1_2) : [];
               const l2Bars = cfg.l2_enabled && innerExists ? l2Pool.slice(0, q2) : [];
+              const l2Bars2 = cfg.l2_enabled && innerExists && q2_2 > 0 ? l2Pool.slice(q2, q2 + q2_2) : [];
+
+              const l1R2 = q1_2 > 0 ? bastonRadiusFor(String((cfg as any).l1_diameter2 ?? cfg.l1_diameter ?? '3/4')) : 0;
+              const l2R2 = q2_2 > 0 ? bastonRadiusFor(String((cfg as any).l2_diameter2 ?? cfg.l2_diameter ?? '3/4')) : 0;
 
               for (const bb of l1Bars) {
                 const yU = yBaseU + mToUnits(dev, bb.y_cm / 100);
                 const zU = mToUnits(dev, bb.z_cm / 100);
                 addXSegment(x0z, x1z, yU, zU, bastonRadiusU, bastonL1Mat);
               }
+              for (const bb of l1Bars2) {
+                const yU = yBaseU + mToUnits(dev, bb.y_cm / 100);
+                const zU = mToUnits(dev, bb.z_cm / 100);
+                addXSegment(x0z, x1z, yU, zU, l1R2, bastonL1Mat);
+              }
               for (const bb of l2Bars) {
                 const yU = yBaseU + mToUnits(dev, bb.y_cm / 100);
                 const zU = mToUnits(dev, bb.z_cm / 100);
                 addXSegment(x0z, x1z - bastonLcU, yU, zU, bastonRadiusU, bastonL2Mat);
+              }
+              for (const bb of l2Bars2) {
+                const yU = yBaseU + mToUnits(dev, bb.y_cm / 100);
+                const zU = mToUnits(dev, bb.z_cm / 100);
+                addXSegment(x0z, x1z - bastonLcU, yU, zU, l2R2, bastonL2Mat);
               }
 
               // Uniones en el nodo izquierdo (end=2) por línea
@@ -504,13 +559,14 @@ export function useThreeScene({
                     const kind = kEnd === 'hook' ? 'hook' : 'anchorage';
                     const xFace = xFaceFor(1);
                     const x2 = computeEndX2(x0z, -1, dia, kind, side, xFace);
-                    for (const bb of l1Bars) {
+                    for (const bb of [...l1Bars, ...l1Bars2]) {
+                      const rU = l1Bars.includes(bb) ? bastonRadiusU : l1R2;
                       const yU = yBaseU + mToUnits(dev, bb.y_cm / 100);
                       const zU = mToUnits(dev, bb.z_cm / 100);
-                      addXSegment(x2, x0z, yU, zU, bastonRadiusU, extraMat);
+                      addXSegment(x2, x0z, yU, zU, rU, extraMat);
                       if (kEnd === 'hook') {
                         const y2 = side === 'top' ? yU - hookLegU : yU + hookLegU;
-                        addYSegment(x2, yU, y2, zU, bastonRadiusU, extraMat);
+                        addYSegment(x2, yU, y2, zU, rU, extraMat);
                       }
                     }
                   }
@@ -523,13 +579,14 @@ export function useThreeScene({
                     const kind = kEnd === 'hook' ? 'hook' : 'anchorage';
                     const xFace = xFaceFor(2);
                     const x2 = computeEndX2(x0z, -1, dia, kind, side, xFace);
-                    for (const bb of l2Bars) {
+                    for (const bb of [...l2Bars, ...l2Bars2]) {
+                      const rU = l2Bars.includes(bb) ? bastonRadiusU : l2R2;
                       const yU = yBaseU + mToUnits(dev, bb.y_cm / 100);
                       const zU = mToUnits(dev, bb.z_cm / 100);
-                      addXSegment(x2, x0z, yU, zU, bastonRadiusU, extraMat);
+                      addXSegment(x2, x0z, yU, zU, rU, extraMat);
                       if (kEnd === 'hook') {
                         const y2 = side === 'top' ? yU - hookLegU : yU + hookLegU;
-                        addYSegment(x2, yU, y2, zU, bastonRadiusU, extraMat);
+                        addYSegment(x2, yU, y2, zU, rU, extraMat);
                       }
                     }
                   }
@@ -543,27 +600,42 @@ export function useThreeScene({
             const cfg = getBastonCfg3D(side, 'z2');
             if (cfg.l1_enabled || cfg.l2_enabled) {
               const q1 = Math.max(1, Math.min(3, Math.round(cfg.l1_qty ?? 1)));
+              const q1_2 = Math.max(0, Math.round((cfg as any).l1_qty2 ?? 0));
               const q2 = Math.max(1, Math.min(3, Math.round(cfg.l2_qty ?? 1)));
+              const q2_2 = Math.max(0, Math.round((cfg as any).l2_qty2 ?? 0));
               const L1_u = mToUnits(dev, resolvedLenM(cfg, 'L1_m', defaultLenM));
               const L2_u = mToUnits(dev, resolvedLenM(cfg, 'L2_m', defaultLenM));
               const x0z = xaSide + L1_u;
               const x1z = xbSide - L2_u;
               if (x1z > x0z + 1e-6) {
                 const innerExists = x1z - x0z > 2 * bastonLcU + 1e-6;
-                const idxL1 = 0;
-                const idxL2 = cfg.l1_enabled ? q1 : 0;
                 const l1Bars = cfg.l1_enabled ? l1Pool.slice(0, q1) : [];
+                const l1Bars2 = cfg.l1_enabled && q1_2 > 0 ? l1Pool.slice(q1, q1 + q1_2) : [];
                 const l2Bars = cfg.l2_enabled && innerExists ? l2Pool.slice(0, q2) : [];
+                const l2Bars2 = cfg.l2_enabled && innerExists && q2_2 > 0 ? l2Pool.slice(q2, q2 + q2_2) : [];
+
+                const l1R2 = q1_2 > 0 ? bastonRadiusFor(String((cfg as any).l1_diameter2 ?? cfg.l1_diameter ?? '3/4')) : 0;
+                const l2R2 = q2_2 > 0 ? bastonRadiusFor(String((cfg as any).l2_diameter2 ?? cfg.l2_diameter ?? '3/4')) : 0;
 
                 for (const bb of l1Bars) {
                   const yU = yBaseU + mToUnits(dev, bb.y_cm / 100);
                   const zU = mToUnits(dev, bb.z_cm / 100);
                   addXSegment(x0z, x1z, yU, zU, bastonRadiusU, bastonL1Mat);
                 }
+                for (const bb of l1Bars2) {
+                  const yU = yBaseU + mToUnits(dev, bb.y_cm / 100);
+                  const zU = mToUnits(dev, bb.z_cm / 100);
+                  addXSegment(x0z, x1z, yU, zU, l1R2, bastonL1Mat);
+                }
                 for (const bb of l2Bars) {
                   const yU = yBaseU + mToUnits(dev, bb.y_cm / 100);
                   const zU = mToUnits(dev, bb.z_cm / 100);
                   addXSegment(x0z + bastonLcU, x1z - bastonLcU, yU, zU, bastonRadiusU, bastonL2Mat);
+                }
+                for (const bb of l2Bars2) {
+                  const yU = yBaseU + mToUnits(dev, bb.y_cm / 100);
+                  const zU = mToUnits(dev, bb.z_cm / 100);
+                  addXSegment(x0z + bastonLcU, x1z - bastonLcU, yU, zU, l2R2, bastonL2Mat);
                 }
               }
             }
@@ -574,7 +646,9 @@ export function useThreeScene({
             const cfg = getBastonCfg3D(side, 'z3');
             if (cfg.l1_enabled || cfg.l2_enabled) {
               const q1 = Math.max(1, Math.min(3, Math.round(cfg.l1_qty ?? 1)));
+              const q1_2 = Math.max(0, Math.round((cfg as any).l1_qty2 ?? 0));
               const q2 = Math.max(1, Math.min(3, Math.round(cfg.l2_qty ?? 1)));
+              const q2_2 = Math.max(0, Math.round((cfg as any).l2_qty2 ?? 0));
 
               const L3_u = mToUnits(dev, resolvedLenM(cfg, 'L3_m', defaultL3M));
               const x1z = xbSide;
@@ -582,17 +656,32 @@ export function useThreeScene({
               const innerExists = x1z - x0z > bastonLcU + 1e-6;
 
               const l1Bars = cfg.l1_enabled ? l1Pool.slice(0, q1) : [];
+              const l1Bars2 = cfg.l1_enabled && q1_2 > 0 ? l1Pool.slice(q1, q1 + q1_2) : [];
               const l2Bars = cfg.l2_enabled && innerExists ? l2Pool.slice(0, q2) : [];
+              const l2Bars2 = cfg.l2_enabled && innerExists && q2_2 > 0 ? l2Pool.slice(q2, q2 + q2_2) : [];
+
+              const l1R2 = q1_2 > 0 ? bastonRadiusFor(String((cfg as any).l1_diameter2 ?? cfg.l1_diameter ?? '3/4')) : 0;
+              const l2R2 = q2_2 > 0 ? bastonRadiusFor(String((cfg as any).l2_diameter2 ?? cfg.l2_diameter ?? '3/4')) : 0;
 
               for (const bb of l1Bars) {
                 const yU = yBaseU + mToUnits(dev, bb.y_cm / 100);
                 const zU = mToUnits(dev, bb.z_cm / 100);
                 addXSegment(x0z, x1z, yU, zU, bastonRadiusU, bastonL1Mat);
               }
+              for (const bb of l1Bars2) {
+                const yU = yBaseU + mToUnits(dev, bb.y_cm / 100);
+                const zU = mToUnits(dev, bb.z_cm / 100);
+                addXSegment(x0z, x1z, yU, zU, l1R2, bastonL1Mat);
+              }
               for (const bb of l2Bars) {
                 const yU = yBaseU + mToUnits(dev, bb.y_cm / 100);
                 const zU = mToUnits(dev, bb.z_cm / 100);
                 addXSegment(x0z + bastonLcU, x1z, yU, zU, bastonRadiusU, bastonL2Mat);
+              }
+              for (const bb of l2Bars2) {
+                const yU = yBaseU + mToUnits(dev, bb.y_cm / 100);
+                const zU = mToUnits(dev, bb.z_cm / 100);
+                addXSegment(x0z + bastonLcU, x1z, yU, zU, l2R2, bastonL2Mat);
               }
 
               // Uniones en el nodo derecho (end=1) por línea
@@ -614,13 +703,14 @@ export function useThreeScene({
                     const kind = kEnd === 'hook' ? 'hook' : 'anchorage';
                     const xFace = xFaceFor(1);
                     const x2 = computeEndX2(x1z, +1, dia, kind, side, xFace);
-                    for (const bb of l1Bars) {
+                    for (const bb of [...l1Bars, ...l1Bars2]) {
+                      const rU = l1Bars.includes(bb) ? bastonRadiusU : l1R2;
                       const yU = yBaseU + mToUnits(dev, bb.y_cm / 100);
                       const zU = mToUnits(dev, bb.z_cm / 100);
-                      addXSegment(x1z, x2, yU, zU, bastonRadiusU, extraMat);
+                      addXSegment(x1z, x2, yU, zU, rU, extraMat);
                       if (kEnd === 'hook') {
                         const y2 = side === 'top' ? yU - hookLegU : yU + hookLegU;
-                        addYSegment(x2, yU, y2, zU, bastonRadiusU, extraMat);
+                        addYSegment(x2, yU, y2, zU, rU, extraMat);
                       }
                     }
                   }
@@ -633,13 +723,14 @@ export function useThreeScene({
                     const kind = kEnd === 'hook' ? 'hook' : 'anchorage';
                     const xFace = xFaceFor(2);
                     const x2 = computeEndX2(x1z, +1, dia, kind, side, xFace);
-                    for (const bb of l2Bars) {
+                    for (const bb of [...l2Bars, ...l2Bars2]) {
+                      const rU = l2Bars.includes(bb) ? bastonRadiusU : l2R2;
                       const yU = yBaseU + mToUnits(dev, bb.y_cm / 100);
                       const zU = mToUnits(dev, bb.z_cm / 100);
-                      addXSegment(x1z, x2, yU, zU, bastonRadiusU, extraMat);
+                      addXSegment(x1z, x2, yU, zU, rU, extraMat);
                       if (kEnd === 'hook') {
                         const y2 = side === 'top' ? yU - hookLegU : yU + hookLegU;
-                        addYSegment(x2, yU, y2, zU, bastonRadiusU, extraMat);
+                        addYSegment(x2, yU, y2, zU, rU, extraMat);
                       }
                     }
                   }
@@ -838,6 +929,7 @@ export function useThreeScene({
             const resL = computeSpanSectionLayoutWithBastonesCm({ dev, span: leftSpan, cover_m: coverM, face });
             const resR = computeSpanSectionLayoutWithBastonesCm({ dev, span: rightSpan, cover_m: coverM, face });
             if (resL.ok && resR.ok) {
+              // 1er diámetro
               const nBars = Math.min(resL.main_bars_cm.length, resR.main_bars_cm.length);
               const radiusU = mToUnits(dev, (Math.max(resL.main_db_cm, resR.main_db_cm) / 100) / 2);
               for (let bi = 0; bi < nBars; bi++) {
@@ -848,9 +940,23 @@ export function useThreeScene({
                 const yR = yBaseU + mToUnits(dev, bR.y_cm / 100);
                 const zL = mToUnits(dev, bL.z_cm / 100);
                 const zR = mToUnits(dev, bR.z_cm / 100);
-
-                // Recta (sin escalón) también en top.
                 addSegmentTo(parent, xA, yL, zL, xB, yR, zR, radiusU, steelMat);
+              }
+
+              // 2do diámetro
+              const nBars2 = Math.min(resL.main2_bars_cm.length, resR.main2_bars_cm.length);
+              if (nBars2 > 0) {
+                const radiusU2 = mToUnits(dev, (Math.max(resL.main2_db_cm, resR.main2_db_cm) / 100) / 2);
+                for (let bi = 0; bi < nBars2; bi++) {
+                  const bL = resL.main2_bars_cm[bi];
+                  const bR = resR.main2_bars_cm[bi];
+                  if (!bL || !bR) continue;
+                  const yL = yBaseU + mToUnits(dev, bL.y_cm / 100);
+                  const yR = yBaseU + mToUnits(dev, bR.y_cm / 100);
+                  const zL = mToUnits(dev, bL.z_cm / 100);
+                  const zR = mToUnits(dev, bR.z_cm / 100);
+                  addSegmentTo(parent, xA, yL, zL, xB, yR, zR, radiusU2, steelMat2);
+                }
               }
             }
           }
@@ -859,10 +965,10 @@ export function useThreeScene({
           if (!showBastones) continue;
           const cfgL = getBastonCfgForSpan(leftSpan, face, 'z3');
           const cfgR = getBastonCfgForSpan(rightSpan, face, 'z1');
-          const q1L = Math.max(1, Math.min(3, Math.round(cfgL.l1_qty ?? 1)));
-          const q2L = Math.max(1, Math.min(3, Math.round(cfgL.l2_qty ?? 1)));
-          const q1R = Math.max(1, Math.min(3, Math.round(cfgR.l1_qty ?? 1)));
-          const q2R = Math.max(1, Math.min(3, Math.round(cfgR.l2_qty ?? 1)));
+          const q1L = Math.max(1, Math.min(3, Math.round(cfgL.l1_qty ?? 1))) + Math.max(0, Math.round((cfgL as any).l1_qty2 ?? 0));
+          const q2L = Math.max(1, Math.min(3, Math.round(cfgL.l2_qty ?? 1))) + Math.max(0, Math.round((cfgL as any).l2_qty2 ?? 0));
+          const q1R = Math.max(1, Math.min(3, Math.round(cfgR.l1_qty ?? 1))) + Math.max(0, Math.round((cfgR as any).l1_qty2 ?? 0));
+          const q2R = Math.max(1, Math.min(3, Math.round(cfgR.l2_qty ?? 1))) + Math.max(0, Math.round((cfgR as any).l2_qty2 ?? 0));
 
           const resL = computeSpanSectionLayoutWithBastonesCm({ dev, span: leftSpan, cover_m: coverM, face });
           const resR = computeSpanSectionLayoutWithBastonesCm({ dev, span: rightSpan, cover_m: coverM, face });

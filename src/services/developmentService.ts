@@ -176,6 +176,89 @@ function steelKindLegacy(node: NodeIn, side: 'top' | 'bottom'): SteelKind {
   return c ? 'continuous' : 'continuous';
 }
 
+function normalizeDesignDemandSection(input: any) {
+  if (!input || typeof input !== 'object') return null;
+  const location = String(input.location ?? '').trim();
+  if (!location) return null;
+  const face = String(input.face ?? '').trim().toLowerCase() === 'bottom' ? 'bottom' : 'top';
+  const roleRaw = String(input.role ?? '').trim().toLowerCase();
+  const role = roleRaw === 'support_left' || roleRaw === 'midspan' || roleRaw === 'support_right'
+    ? roleRaw
+    : undefined;
+  return {
+    location,
+    face,
+    Mu_tf_m: clampNumber(input.Mu_tf_m ?? input.mu_tf_m ?? input.Mu ?? input.mu ?? 0, 0),
+    Vu_tf: clampNumber(input.Vu_tf ?? input.vu_tf ?? input.Vu ?? input.vu ?? 0, 0),
+    station_m: input.station_m == null ? undefined : clampNumber(input.station_m, 0),
+    span_index: input.span_index == null ? undefined : clampInt(input.span_index, 0),
+    role,
+  } as any;
+}
+
+function normalizeDesignDemands(input: any) {
+  if (!input || typeof input !== 'object' || !Array.isArray(input.cases)) return undefined;
+  const sourceRaw = String(input.source ?? '').trim().toLowerCase();
+  const source = sourceRaw === 'manual' || sourceRaw === 'etabs' || sourceRaw === 'imported'
+    ? sourceRaw
+    : undefined;
+  const cases = input.cases
+    .map((rawCase: any, index: number) => {
+      const name = String(rawCase?.name ?? rawCase?.combo ?? `CASE_${index + 1}`).trim();
+      const sections = Array.isArray(rawCase?.sections)
+        ? rawCase.sections.map(normalizeDesignDemandSection).filter(Boolean)
+        : [];
+      if (!name || sections.length === 0) return null;
+      return { name, sections };
+    })
+    .filter(Boolean);
+  if (cases.length === 0) return undefined;
+  return {
+    source,
+    cases,
+    reference: input.reference && typeof input.reference === 'object'
+      ? {
+        mode: typeof input.reference.mode === 'string' ? input.reference.mode : undefined,
+        matched_label: typeof input.reference.matched_label === 'string' ? input.reference.matched_label : undefined,
+        matched_stories: Array.isArray(input.reference.matched_stories)
+          ? input.reference.matched_stories.map((story: unknown) => String(story)).filter(Boolean)
+          : undefined,
+        total_length_m: clampNumber(input.reference.total_length_m ?? 0, 0),
+        source_total_length_m: clampNumber(input.reference.source_total_length_m ?? 0, 0),
+        scale_factor: clampNumber(input.reference.scale_factor ?? 1, 1),
+        frames: Array.isArray(input.reference.frames)
+          ? input.reference.frames.map((frame: any) => ({
+            beam: String(frame?.beam ?? '').trim(),
+            story: frame?.story == null ? undefined : String(frame.story).trim(),
+            order: clampInt(frame?.order ?? 0, 0),
+            station_start_m: clampNumber(frame?.station_start_m ?? 0, 0),
+            station_end_m: clampNumber(frame?.station_end_m ?? 0, 0),
+            source_length_m: clampNumber(frame?.source_length_m ?? 0, 0),
+          })).filter((frame: any) => frame.beam)
+          : undefined,
+        zones: Array.isArray(input.reference.zones)
+          ? input.reference.zones.map((zone: any) => {
+            const roleRaw = String(zone?.role ?? '').trim().toLowerCase();
+            const role = roleRaw === 'support_left' || roleRaw === 'midspan' || roleRaw === 'support_right'
+              ? roleRaw
+              : undefined;
+            return {
+              location: String(zone?.location ?? '').trim(),
+              face: String(zone?.face ?? '').trim().toLowerCase() === 'bottom' ? 'bottom' : 'top',
+              span_index: clampInt(zone?.span_index ?? 0, 0),
+              role,
+              start_m: clampNumber(zone?.start_m ?? 0, 0),
+              end_m: clampNumber(zone?.end_m ?? 0, 0),
+              ref_m: clampNumber(zone?.ref_m ?? 0, 0),
+            };
+          }).filter((zone: any) => zone.location)
+          : undefined,
+      }
+      : undefined,
+    meta: input.meta && typeof input.meta === 'object' ? input.meta : undefined,
+  } as any;
+}
+
 // ============================================================================
 // CLONE FUNCTIONS
 // ============================================================================
@@ -183,7 +266,13 @@ function steelKindLegacy(node: NodeIn, side: 'top' | 'bottom'): SteelKind {
 export function cloneSteelMeta(m?: SteelMeta | null): SteelMeta {
   const qty = Math.max(1, clampNumber(m?.qty ?? DEFAULT_STEEL_META.qty, DEFAULT_STEEL_META.qty));
   const diameter = String(m?.diameter ?? DEFAULT_STEEL_META.diameter);
-  return { qty, diameter };
+  const result: SteelMeta = { qty, diameter };
+  // Preserve second diameter if present
+  if (m?.qty2 != null && m.qty2 > 0) {
+    result.qty2 = m.qty2;
+    result.diameter2 = m.diameter2;
+  }
+  return result;
 }
 
 
@@ -371,7 +460,7 @@ export function normalizeBastonCfg(input: unknown): BastonCfg {
   const L2_m = typeof L2_m_raw === 'number' && Number.isFinite(L2_m_raw) && L2_m_raw > 0 ? L2_m_raw : undefined;
   const L3_m = typeof L3_m_raw === 'number' && Number.isFinite(L3_m_raw) && L3_m_raw > 0 ? L3_m_raw : undefined;
 
-  return {
+  const result: BastonCfg = {
     l1_enabled,
     l1_qty,
     l1_diameter,
@@ -387,6 +476,16 @@ export function normalizeBastonCfg(input: unknown): BastonCfg {
     L2_m,
     L3_m,
   };
+  // Preserve second diameter per line if present
+  if (src.l1_qty2 != null && src.l1_qty2 > 0) {
+    result.l1_qty2 = src.l1_qty2;
+    result.l1_diameter2 = src.l1_diameter2 != null ? String(src.l1_diameter2) : l1_diameter;
+  }
+  if (src.l2_qty2 != null && src.l2_qty2 > 0) {
+    result.l2_qty2 = src.l2_qty2;
+    result.l2_diameter2 = src.l2_diameter2 != null ? String(src.l2_diameter2) : l2_diameter;
+  }
+  return result;
 }
 
 export function normalizeBastonesSideCfg(input: unknown): BastonesSideCfg {
@@ -606,6 +705,7 @@ export function normalizeDev(input: DevelopmentIn, appCfg: AppConfig): Developme
         rebar_diameters_cm: (incoming?.rebar_diameters_cm ?? incoming?.rebarDiametersCm) ?? undefined,
       } as SteelLayoutSettings;
     })(),
+    design_demands: normalizeDesignDemands((input as any).design_demands ?? (input as any).designDemands),
     spans: safeSpans,
     nodes: safeNodes,
     crossbeams: ((input as any).crossbeams || []).map((cb: any) => {

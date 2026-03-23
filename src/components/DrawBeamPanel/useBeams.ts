@@ -83,11 +83,11 @@ export function useBeams(storageKey = STORAGE_KEY) {
     return 1;
   }, [beams]);
 
-  const addBeam = useCallback((type: NivelType, initialGroup?: { ini: Ordinal; fin: Ordinal }) => {
-    const num = nextFreeNumber(type);
+  const addBeam = useCallback((type: NivelType, initialGroup?: { ini: Ordinal; fin: Ordinal }, customNumber?: number) => {
+    const num = customNumber ?? nextFreeNumber(type);
     const id = `${PREFIX[type]}-${PAD(num)}`;
     const groups: GrupoViga[] = [];
-    if (initialGroup && ordIdx(initialGroup.fin) > ordIdx(initialGroup.ini)) {
+    if (initialGroup && ordIdx(initialGroup.fin) >= ordIdx(initialGroup.ini)) {
       const gid = crypto.randomUUID();
       groups.push({ id: gid, nivelInicial: initialGroup.ini, nivelFinal: initialGroup.fin });
     }
@@ -95,13 +95,14 @@ export function useBeams(storageKey = STORAGE_KEY) {
     setBeams((prev) => [...prev, newBeam]);
     setSelectedBeamId(id);
     setSelectedGroupId(groups[0]?.id ?? null);
-    setView('editar');
+    setView('vigas');
     return newBeam;
   }, [nextFreeNumber]);
 
   /** Create multiple beams at once from batch-imported developments.
    *  Uses name/level_type/beam_no from each DevelopmentIn.
-   *  Stores the development inside the first group of each beam. */
+   *  If a beam with the same id already exists, the development is added
+   *  as a new group (if the story range doesn't overlap). */
   const addBeamsBatch = useCallback((
     devs: DevelopmentIn[],
     storyRange: { ini: Ordinal; fin: Ordinal },
@@ -116,34 +117,83 @@ export function useBeams(storageKey = STORAGE_KEY) {
       return usedNums[type];
     };
 
+    // Index existing beams by id for fast lookup
+    const existingById = new Map<string, Viga>();
+    for (const b of beams) existingById.set(b.id, b);
+    // Also index newly created beams in this batch
+    const batchById = new Map<string, Viga>();
+
+    // Groups to append to existing beams: Map<beamId, GrupoViga[]>
+    const mergeGroups = new Map<string, GrupoViga[]>();
+
     for (const d of devs) {
       const type = dxfLevelToType(d.level_type);
       const used = getUsed(type);
 
-      // Use beam_no from DXF if available and not already taken, otherwise auto-assign
-      let num = d.beam_no && !used.has(d.beam_no) ? d.beam_no : undefined;
+      // Use beam_no from DXF if available, otherwise auto-assign
+      let num = d.beam_no && used.has(d.beam_no) ? d.beam_no : (d.beam_no ?? undefined);
       if (!num) {
         for (let n = 1; n <= 99; n++) {
           if (!used.has(n)) { num = n; break; }
         }
         if (!num) num = 1;
       }
-      used.add(num);
 
       const id = `${PREFIX[type]}-${PAD(num)}`;
       const gid = crypto.randomUUID();
-      const groups: GrupoViga[] = [
-        { id: gid, nivelInicial: storyRange.ini, nivelFinal: storyRange.fin, development: d },
-      ];
+      const newGroup: GrupoViga = { id: gid, nivelInicial: storyRange.ini, nivelFinal: storyRange.fin, development: d };
 
-      newBeams.push({ id, type, number: num, groups });
+      // Check if this beam already exists (in DB or earlier in this batch)
+      const existing = existingById.get(id) ?? batchById.get(id);
+      if (existing) {
+        // Check overlap against all existing groups + any already-queued merge groups
+        const allGroups = [...existing.groups, ...(mergeGroups.get(id) ?? [])];
+        const newExcl = new Set<number>();
+        const newFloors = new Set<number>();
+        for (let i = ordIdx(storyRange.ini); i <= ordIdx(storyRange.fin); i++) {
+          if (!newExcl.has(i)) newFloors.add(i);
+        }
+        const overlaps = allGroups.some((g) => {
+          const gExcl = new Set((g.excludedLevels ?? []).map(ordIdx));
+          for (let i = ordIdx(g.nivelInicial); i <= ordIdx(g.nivelFinal); i++) {
+            if (!gExcl.has(i) && newFloors.has(i)) return true;
+          }
+          return false;
+        });
+        if (!overlaps) {
+          const arr = mergeGroups.get(id) ?? [];
+          arr.push(newGroup);
+          mergeGroups.set(id, arr);
+        }
+        // If overlaps, skip silently (same beam, same floors — duplicate)
+        continue;
+      }
+
+      // New beam
+      used.add(num);
+      const beam: Viga = { id, type, number: num, groups: [newGroup] };
+      newBeams.push(beam);
+      batchById.set(id, beam);
     }
 
-    setBeams((prev) => [...prev, ...newBeams]);
-    // Select the first new beam
-    if (newBeams.length > 0) {
-      setSelectedBeamId(newBeams[0].id);
-      setSelectedGroupId(newBeams[0].groups[0]?.id ?? null);
+    setBeams((prev) => {
+      // Merge groups into existing beams
+      let updated = prev;
+      if (mergeGroups.size > 0) {
+        updated = prev.map((b) => {
+          const extra = mergeGroups.get(b.id);
+          if (!extra) return b;
+          return { ...b, groups: [...b.groups, ...extra] };
+        });
+      }
+      return [...updated, ...newBeams];
+    });
+    // Select the first new beam or first merged beam
+    const firstId = newBeams[0]?.id ?? mergeGroups.keys().next().value;
+    if (firstId) {
+      setSelectedBeamId(firstId);
+      const firstGroup = newBeams[0]?.groups[0] ?? mergeGroups.get(firstId)?.[0];
+      setSelectedGroupId(firstGroup?.id ?? null);
     }
     setView('vigas');
     return newBeams;
@@ -176,24 +226,32 @@ export function useBeams(storageKey = STORAGE_KEY) {
     setView('vigas');
   }, []);
 
-  const groupOverlaps = useCallback((beamId: string, nivelInicial: Ordinal, nivelFinal: Ordinal): boolean => {
+  const groupOverlaps = useCallback((beamId: string, nivelInicial: Ordinal, nivelFinal: Ordinal, excludedLevels?: Ordinal[], skipGroupId?: string): boolean => {
     const beam = beams.find((b) => b.id === beamId);
     if (!beam) return false;
-    const iniI = ordIdx(nivelInicial);
-    const finI = ordIdx(nivelFinal);
+    // Build set of active floor indices for the new group
+    const newExcl = new Set((excludedLevels ?? []).map(ordIdx));
+    const newFloors = new Set<number>();
+    for (let i = ordIdx(nivelInicial); i <= ordIdx(nivelFinal); i++) {
+      if (!newExcl.has(i)) newFloors.add(i);
+    }
     return beam.groups.some((g) => {
-      const gIni = ordIdx(g.nivelInicial);
-      const gFin = ordIdx(g.nivelFinal);
-      return iniI < gFin && finI > gIni;
+      if (skipGroupId && g.id === skipGroupId) return false;
+      const gExcl = new Set((g.excludedLevels ?? []).map(ordIdx));
+      for (let i = ordIdx(g.nivelInicial); i <= ordIdx(g.nivelFinal); i++) {
+        if (!gExcl.has(i) && newFloors.has(i)) return true;
+      }
+      return false;
     });
   }, [beams]);
 
-  const addGroup = useCallback((beamId: string, nivelInicial: Ordinal, nivelFinal: Ordinal): string | null => {
-    if (ordIdx(nivelFinal) <= ordIdx(nivelInicial)) return null;
-    if (groupOverlaps(beamId, nivelInicial, nivelFinal)) return null;
+  const addGroup = useCallback((beamId: string, nivelInicial: Ordinal, nivelFinal: Ordinal, excludedLevels?: Ordinal[]): string | null => {
+    if (ordIdx(nivelFinal) < ordIdx(nivelInicial)) return null;
+    if (groupOverlaps(beamId, nivelInicial, nivelFinal, excludedLevels)) return null;
 
     const gid = crypto.randomUUID();
     const group: GrupoViga = { id: gid, nivelInicial, nivelFinal };
+    if (excludedLevels && excludedLevels.length > 0) group.excludedLevels = excludedLevels;
     setBeams((prev) =>
       prev.map((b) =>
         b.id === beamId ? { ...b, groups: [...b.groups, group] } : b,
@@ -241,6 +299,25 @@ export function useBeams(storageKey = STORAGE_KEY) {
     );
   }, [selectedBeamId, selectedGroupId]);
 
+  const applyGroupDevelopments = useCallback((updates: Array<{ beamId: string; groupId?: string | null; development: import('../../types').DevelopmentIn }>) => {
+    if (!updates.length) return;
+    const devByKey = new Map(
+      updates
+        .filter((item) => item.beamId && item.groupId && item.development)
+        .map((item) => [`${item.beamId}::${item.groupId}`, item.development] as const),
+    );
+    if (devByKey.size === 0) return;
+    setBeams((prev) =>
+      prev.map((beam) => ({
+        ...beam,
+        groups: beam.groups.map((group) => {
+          const nextDev = devByKey.get(`${beam.id}::${group.id}`);
+          return nextDev ? { ...group, development: nextDev } : group;
+        }),
+      })),
+    );
+  }, []);
+
   return {
     beams,
     selectedBeam,
@@ -261,6 +338,7 @@ export function useBeams(storageKey = STORAGE_KEY) {
     selectBeam,
     setSelectedGroupId,
     saveGroupDevelopment,
+    applyGroupDevelopments,
     nextFreeNumber,
     storageWarning,
   };

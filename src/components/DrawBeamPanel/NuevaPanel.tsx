@@ -69,13 +69,13 @@ const S = {
   },
 } as const;
 
-/** Shared ordinal pickers for Story i / Story f */
+/** Shared ordinal pickers for Story i / Story f (allows same level = single floor) */
 const OrdinalPickers: React.FC<{
   ini: string; fin: string;
   onIniChange: (v: string) => void; onFinChange: (v: string) => void;
 }> = ({ ini, fin, onIniChange, onFinChange }) => {
   const iniIdx = ORDINALS.indexOf(ini as Ordinal);
-  const finOpts = ORDINALS.filter((_, i) => i > iniIdx);
+  const finOpts = ORDINALS.filter((_, i) => i >= iniIdx);
   const finSafe = finOpts.includes(fin as Ordinal) ? fin : finOpts[0];
 
   return (
@@ -83,7 +83,7 @@ const OrdinalPickers: React.FC<{
       <div style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
         <Cap ch="Story i" />
         <select value={ini} onChange={(e) => onIniChange(e.target.value)} className="input" style={{ height: 30 }}>
-          {ORDINALS.slice(0, -1).map((o) => <option key={o}>{o}</option>)}
+          {ORDINALS.map((o) => <option key={o}>{o}</option>)}
         </select>
       </div>
       <div style={{ color: C.dim, textAlign: 'center', paddingBottom: 6 }}>→</div>
@@ -103,7 +103,10 @@ export const NuevaPanel: React.FC<NuevaPanelProps> = ({
   const [mode, setMode] = useState<CreationMode>('pick');
   const [tipo, setTipo] = useState<NivelType | null>(null);
   const [ini, setIni] = useState(ORDINALS[0] as string);
-  const [fin, setFin] = useState(ORDINALS[1] as string);
+  const [fin, setFin] = useState(ORDINALS[0] as string);
+
+  // Manual beam number override (null = auto)
+  const [customNum, setCustomNum] = useState<number | null>(null);
 
   // DXF config state
   const [pendingFile, setPendingFile] = useState<File | null>(null);
@@ -119,17 +122,19 @@ export const NuevaPanel: React.FC<NuevaPanelProps> = ({
     return ctx.nextFreeNumber(tipo);
   }, [ctx, tipo]);
 
-  const code = tipo ? `${PREFIX[tipo]}-${PAD(nextNum)}` : '—';
+  const effectiveNum = customNum ?? nextNum;
+  const code = tipo ? `${PREFIX[tipo]}-${PAD(effectiveNum)}` : '—';
   const iniIdx = ORDINALS.indexOf(ini as Ordinal);
-  const finOpts = ORDINALS.filter((_, i) => i > iniIdx);
+  const finOpts = ORDINALS.filter((_, i) => i >= iniIdx);
   const finSafe = finOpts.includes(fin as Ordinal) ? fin : finOpts[0];
   const color = tipo ? NIVEL_COLOR[tipo] : C.teal;
 
   const resetState = () => {
     setMode('pick');
     setTipo(null);
+    setCustomNum(null);
     setIni(ORDINALS[0] as string);
-    setFin(ORDINALS[1] as string);
+    setFin(ORDINALS[0] as string);
     setPendingFile(null);
     setDxfH(0.50);
     setDxfB(0.25);
@@ -201,26 +206,52 @@ export const NuevaPanel: React.FC<NuevaPanelProps> = ({
 
   // ── Step 2 for Manual: configure group + create ──
   if (mode === 'manual' && tipo) {
+    const numExists = ctx.beams.some((b) => b.type === tipo && b.number === effectiveNum);
     return (
       <div style={S.col}>
         <SectionTitle title="Nueva viga" />
         <div style={S.codeBox(color)}>
           <div style={{ flex: 1 }}>
             <Cap ch="Codigo" />
-            <div style={S.codeLarge(color)}>{code}</div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+              <span style={S.codeLarge(color)}>{PREFIX[tipo]}-</span>
+              <input
+                type="number"
+                min={1}
+                max={99}
+                value={effectiveNum}
+                onChange={(e) => {
+                  const v = parseInt(e.target.value, 10);
+                  if (v >= 1 && v <= 99) setCustomNum(v);
+                  else if (e.target.value === '') setCustomNum(null);
+                }}
+                style={{
+                  width: 52, fontFamily: 'JetBrains Mono, monospace', fontSize: 18,
+                  fontWeight: 900, color: color, background: 'transparent',
+                  border: `1px solid ${color}55`, borderRadius: 4,
+                  padding: '2px 6px', textAlign: 'center',
+                }}
+              />
+            </div>
+            {numExists && (
+              <div style={{ fontSize: 9, color: C.red, marginTop: 2 }}>
+                Ya existe {code}
+              </div>
+            )}
           </div>
-          <button type="button" onClick={() => setTipo(null)} style={S.backBtn}>← Tipo</button>
+          <button type="button" onClick={() => { setTipo(null); setCustomNum(null); }} style={S.backBtn}>← Tipo</button>
         </div>
 
         <OrdinalPickers ini={ini} fin={fin} onIniChange={setIni} onFinChange={setFin} />
 
         <button
           type="button"
+          disabled={numExists}
           onClick={() => {
-            ctx.addBeam(tipo, { ini: ini as Ordinal, fin: finSafe as Ordinal });
+            ctx.addBeam(tipo, { ini: ini as Ordinal, fin: finSafe as Ordinal }, effectiveNum);
             resetState();
           }}
-          style={S.createBtn(color)}
+          style={{ ...S.createBtn(color), opacity: numExists ? 0.5 : 1 }}
         >
           <Icon name="plus" size={11} color={C.bg} />
           CREAR {code}
@@ -332,9 +363,11 @@ export const NuevaPanel: React.FC<NuevaPanelProps> = ({
   // ── DXF Config (single) — ask tipo, story, b×h then import + create beam ──
   if (mode === 'dxf-config' && pendingFile) {
     const cfgColor = tipo ? NIVEL_COLOR[tipo] : C.teal;
-    const cfgCode = tipo ? `${PREFIX[tipo]}-${PAD(ctx.nextFreeNumber(tipo))}` : '—';
+    const cfgEffNum = customNum ?? (tipo ? ctx.nextFreeNumber(tipo) : 1);
+    const cfgCode = tipo ? `${PREFIX[tipo]}-${PAD(cfgEffNum)}` : '—';
+    const cfgNumExists = tipo ? ctx.beams.some((b) => b.type === tipo && b.number === cfgEffNum) : false;
     const cfgIniIdx = ORDINALS.indexOf(ini as Ordinal);
-    const cfgFinOpts = ORDINALS.filter((_, i) => i > cfgIniIdx);
+    const cfgFinOpts = ORDINALS.filter((_, i) => i >= cfgIniIdx);
     const cfgFinSafe = cfgFinOpts.includes(fin as Ordinal) ? fin : cfgFinOpts[0];
 
     return (
@@ -374,7 +407,31 @@ export const NuevaPanel: React.FC<NuevaPanelProps> = ({
           <div style={S.codeBox(cfgColor)}>
             <div style={{ flex: 1 }}>
               <Cap ch="Codigo" />
-              <div style={S.codeLarge(cfgColor)}>{cfgCode}</div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                <span style={S.codeLarge(cfgColor)}>{PREFIX[tipo]}-</span>
+                <input
+                  type="number"
+                  min={1}
+                  max={99}
+                  value={cfgEffNum}
+                  onChange={(e) => {
+                    const v = parseInt(e.target.value, 10);
+                    if (v >= 1 && v <= 99) setCustomNum(v);
+                    else if (e.target.value === '') setCustomNum(null);
+                  }}
+                  style={{
+                    width: 52, fontFamily: 'JetBrains Mono, monospace', fontSize: 18,
+                    fontWeight: 900, color: cfgColor, background: 'transparent',
+                    border: `1px solid ${cfgColor}55`, borderRadius: 4,
+                    padding: '2px 6px', textAlign: 'center',
+                  }}
+                />
+              </div>
+              {cfgNumExists && (
+                <div style={{ fontSize: 9, color: C.red, marginTop: 2 }}>
+                  Ya existe {cfgCode}
+                </div>
+              )}
             </div>
           </div>
         )}
@@ -385,7 +442,7 @@ export const NuevaPanel: React.FC<NuevaPanelProps> = ({
         {/* Section b × h */}
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
-            <Cap ch="b (m)" />
+            <Cap ch="b por defecto (m)" />
             <input
               className="input"
               type="number"
@@ -397,7 +454,7 @@ export const NuevaPanel: React.FC<NuevaPanelProps> = ({
             />
           </div>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
-            <Cap ch="h (m)" />
+            <Cap ch="h por defecto (m)" />
             <input
               className="input"
               type="number"
@@ -412,15 +469,15 @@ export const NuevaPanel: React.FC<NuevaPanelProps> = ({
 
         <button
           type="button"
-          disabled={!tipo || busy}
+          disabled={!tipo || busy || cfgNumExists}
           onClick={() => {
-            if (!tipo || !pendingFile) return;
+            if (!tipo || !pendingFile || cfgNumExists) return;
             const finVal = cfgFinSafe as Ordinal;
-            ctx.addBeam(tipo, { ini: ini as Ordinal, fin: finVal });
+            ctx.addBeam(tipo, { ini: ini as Ordinal, fin: finVal }, cfgEffNum);
             onImportDxfFile(pendingFile, { h: dxfH, b: dxfB });
             resetState();
           }}
-          style={{ ...S.createBtn(cfgColor), opacity: tipo ? 1 : 0.5 }}
+          style={{ ...S.createBtn(cfgColor), opacity: (tipo && !cfgNumExists) ? 1 : 0.5 }}
         >
           <Icon name="dxf" size={13} color={C.bg} />
           {busy ? 'Importando...' : `IMPORTAR ${tipo ? cfgCode : 'DXF'}`}
@@ -436,7 +493,7 @@ export const NuevaPanel: React.FC<NuevaPanelProps> = ({
   // ── Batch DXF Config — ask story, b×h, order; tipo comes from DXF names ──
   if (mode === 'batch-config' && pendingFile) {
     const cfgIniIdx = ORDINALS.indexOf(ini as Ordinal);
-    const cfgFinOpts = ORDINALS.filter((_, i) => i > cfgIniIdx);
+    const cfgFinOpts = ORDINALS.filter((_, i) => i >= cfgIniIdx);
     const cfgFinSafe = cfgFinOpts.includes(fin as Ordinal) ? fin : cfgFinOpts[0];
 
     return (
@@ -457,7 +514,7 @@ export const NuevaPanel: React.FC<NuevaPanelProps> = ({
         {/* Section b × h */}
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
-            <Cap ch="b (m)" />
+            <Cap ch="b por defecto (m)" />
             <input
               className="input"
               type="number"
@@ -469,7 +526,7 @@ export const NuevaPanel: React.FC<NuevaPanelProps> = ({
             />
           </div>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
-            <Cap ch="h (m)" />
+            <Cap ch="h por defecto (m)" />
             <input
               className="input"
               type="number"
@@ -524,7 +581,7 @@ export const NuevaPanel: React.FC<NuevaPanelProps> = ({
   // ── Batch Preview — show recognized beams before confirming ──
   if (mode === 'batch-preview' && batchPreview.length > 0) {
     const cfgIniIdx = ORDINALS.indexOf(ini as Ordinal);
-    const cfgFinOpts = ORDINALS.filter((_, i) => i > cfgIniIdx);
+    const cfgFinOpts = ORDINALS.filter((_, i) => i >= cfgIniIdx);
     const cfgFinSafe = cfgFinOpts.includes(fin as Ordinal) ? fin : cfgFinOpts[0];
 
     return (
