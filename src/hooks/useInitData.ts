@@ -244,10 +244,10 @@ export function useInitData({
   useEffect(() => {
     if (!authToken) return;
     if (!initialLoadDoneRef.current) return;
-    setSaveStatus('saving');
     const t = window.setTimeout(async () => {
       // Si un manual-save está en curso, saltar este auto-save.
       if (manualSaveLockRef.current) return;
+      setSaveStatus('saving');
       try {
         await saveState(payload, { token: authToken, variant: variantScope });
         setSaveStatus('saved');

@@ -172,22 +172,34 @@ export const DrawBeamPanel: React.FC<DrawBeamPanelProps> = ({
     prevViewRef.current = ctx.view;
   }, [ctx.view, onEditorTabChange, onExternalViewChange]);
 
-  // When the active development changes in App, save it back to the selected group
+  // When the active development changes in App, save it back to the selected group.
+  // Refs estables para leer beam/group dentro del timer sin ser dependencias reactivas
+  // (evita loop: save → beams cambia → selectedBeam nueva ref → effect re-dispara).
   const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const selectedBeamRef = useRef(ctx.selectedBeam);
+  selectedBeamRef.current = ctx.selectedBeam;
+  const selectedGroupIdRef = useRef(ctx.selectedGroupId);
+  selectedGroupIdRef.current = ctx.selectedGroupId;
+  const saveGroupDevRef = useRef(ctx.saveGroupDevelopment);
+  saveGroupDevRef.current = ctx.saveGroupDevelopment;
+
   useEffect(() => {
-    if (!activeDevelopment || !ctx.selectedGroupId || !ctx.selectedBeam) return;
-    // Debounce to avoid saving on every keystroke
+    if (!activeDevelopment || !selectedGroupIdRef.current || !selectedBeamRef.current) return;
     if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
     saveTimerRef.current = setTimeout(() => {
-      // Sync metadata (name, floor range, level type) from beam + group
-      const group = ctx.selectedBeam!.groups.find(g => g.id === ctx.selectedGroupId);
+      const beam = selectedBeamRef.current;
+      const groupId = selectedGroupIdRef.current;
+      if (!beam || !groupId) return;
+      const group = beam.groups.find(g => g.id === groupId);
       const devToSave = group
-        ? syncDevMeta(activeDevelopment, ctx.selectedBeam!, group)
+        ? syncDevMeta(activeDevelopment, beam, group)
         : activeDevelopment;
-      ctx.saveGroupDevelopment(devToSave);
+      saveGroupDevRef.current(devToSave);
     }, 500);
     return () => { if (saveTimerRef.current) clearTimeout(saveTimerRef.current); };
-  }, [activeDevelopment, ctx.selectedGroupId, ctx.selectedBeam, ctx.saveGroupDevelopment]);
+    // Solo re-disparar cuando activeDevelopment cambia, NO cuando beam/group cambian.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeDevelopment]);
 
   // Emit all group developments to parent whenever beams change
   useEffect(() => {
