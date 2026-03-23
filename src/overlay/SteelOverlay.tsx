@@ -1,5 +1,5 @@
 import React, { useMemo, useState, useCallback, useRef, useEffect } from 'react';
-import type { DevelopmentIn, PreviewResponse, SpanIn, NodeIn, BastonCfg, StirrupsDistributionIn, StirrupsSectionIn } from '../types';
+import type { DevelopmentIn, PreviewResponse, SpanIn, NodeIn, BastonCfg, StirrupsDistributionIn, StirrupsSectionIn, SteelMeta } from '../types';
 import { canvasMapper, type Bounds } from '../services/canvasService';
 import { computeNodeOrigins, computeSpanMidX, computeSpanRangeX } from '../services/geometryService';
 import { SpanSteelPopover, NodeEndPopover } from './AceroCorrPopover';
@@ -29,7 +29,7 @@ export interface SteelOverlayProps {
   yScale?: number;
 
   // Callbacks that write to existing state (spans[]/nodes[])
-  onUpdateSpanSteel: (spanIdx: number, side: 'top' | 'bottom', patch: Partial<{ qty: number; diameter: string }>) => void;
+  onUpdateSpanSteel: (spanIdx: number, side: 'top' | 'bottom', patch: Partial<SteelMeta>) => void;
   onUpdateNode: (nodeIdx: number, patch: Partial<NodeIn>) => void;
   onUpdateBaston: (spanIdx: number, side: 'top' | 'bottom', zone: 'z1' | 'z2' | 'z3', patch: Partial<BastonCfg>) => void;
   onUpdateStirrups: (spanIdx: number, patch: Partial<StirrupsDistributionIn>) => void;

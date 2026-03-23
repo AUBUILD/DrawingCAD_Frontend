@@ -83,6 +83,7 @@ export function createConcreteMaterial(): THREE.MeshStandardMaterial {
 export function createSteelMaterials() {
   return {
     main: new THREE.MeshStandardMaterial({ color: 0xfacc15, roughness: 0.35, metalness: 0.25 }),
+    main2: new THREE.MeshStandardMaterial({ color: 0xfb923c, roughness: 0.35, metalness: 0.25 }),
     bastonL1: new THREE.MeshStandardMaterial({ color: 0x22c55e, roughness: 0.40, metalness: 0.15 }),
     bastonL2: new THREE.MeshStandardMaterial({ color: 0x06b6d4, roughness: 0.40, metalness: 0.15 }),
     extra: new THREE.MeshStandardMaterial({ color: 0xd946ef, roughness: 0.45, metalness: 0.10 }),

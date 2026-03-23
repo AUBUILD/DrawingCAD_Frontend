@@ -25,6 +25,8 @@ export interface GrupoViga {
   id: string;
   nivelInicial: Ordinal;
   nivelFinal: Ordinal;
+  /** Floors within the range that are excluded from this group. */
+  excludedLevels?: Ordinal[];
   concreto?: ConcretoData;
   acero?: AceroData;
   metrados?: MetradoData;

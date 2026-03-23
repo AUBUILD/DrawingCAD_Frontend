@@ -4,6 +4,7 @@ import type { ConcreteTabProps } from '../../tabs/ConcreteTab';
 import type { SteelTabProps } from '../../tabs/SteelTab';
 import type { MetradoTabProps } from '../../tabs/MetradoTab';
 import type { JsonTabProps } from '../../tabs/JsonTab';
+import type { DesignTabProps } from '../../tabs/DesignTab';
 import type { DefaultPreferenceId } from '../../utils';
 
 export interface EditorTabProps {
@@ -15,4 +16,5 @@ export interface EditorTabProps {
   steelTabProps: SteelTabProps;
   metradoTabProps: MetradoTabProps;
   jsonTabProps: JsonTabProps;
+  designTabProps?: DesignTabProps;
 }

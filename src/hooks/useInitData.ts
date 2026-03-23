@@ -1,4 +1,4 @@
-import { useEffect } from 'react';
+import { useEffect, useRef } from 'react';
 import type { DevelopmentIn } from '../types';
 import type { AppConfig, PersonalizadoPayloadV1 } from '../services';
 import {
@@ -86,9 +86,16 @@ export function useInitData({
   variantScope,
 }: UseInitDataParams) {
 
+  // Flag: bloquea el auto-save hasta que la carga inicial complete.
+  // Evita que el payload por defecto sobreescriba los datos del backend
+  // cuando hay latencia (cold start de Render/Neon).
+  const initialLoadDoneRef = useRef(false);
+
   // Cargar estado persistido (si existe backend/DB). Ignora fallos.
   useEffect(() => {
     if (!authToken) return;
+    // Cada vez que cambia el scope o token, marcamos que la carga aún no terminó.
+    initialLoadDoneRef.current = false;
     let cancelled = false;
     (async () => {
       let loaded = false;
@@ -139,19 +146,22 @@ export function useInitData({
           setActiveDevIdx(0);
           setJsonText(toJson(stored));
         }
-      } catch {
-        // ignore
+      } catch (err) {
+        console.warn('[useInitData] Error al cargar estado persistido:', err);
       } finally {
         if (cancelled) return;
-        if (loaded) return;
-        // Si no hay estado persistido, aplicar preferencia por defecto.
-        if (defaultPref === 'basico_bastones') {
-          applyBasicoBastonesPreference();
-        } else if (defaultPref === 'basico') {
-          applyBasicoPreference();
-        } else {
-          applyPersonalizadoPreference(readPersonalizado());
+        if (!loaded) {
+          // Si no hay estado persistido, aplicar preferencia por defecto.
+          if (defaultPref === 'basico_bastones') {
+            applyBasicoBastonesPreference();
+          } else if (defaultPref === 'basico') {
+            applyBasicoPreference();
+          } else {
+            applyPersonalizadoPreference(readPersonalizado());
+          }
         }
+        // Desbloquear auto-save ahora que la carga terminó.
+        initialLoadDoneRef.current = true;
       }
     })();
 
@@ -217,9 +227,12 @@ export function useInitData({
     })();
   }, []);
 
-  // Guardar estado persistido (debounced). Ignora fallos.
+  // Guardar estado persistido (debounced).
+  // Bloqueado hasta que la carga inicial complete para evitar sobreescribir
+  // datos del backend con el payload por defecto durante cold starts.
   useEffect(() => {
     if (!authToken) return;
+    if (!initialLoadDoneRef.current) return;
     setSaveStatus('saving');
     const t = window.setTimeout(async () => {
       try {

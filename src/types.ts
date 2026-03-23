@@ -79,6 +79,9 @@ export type NodeIn = {
 export type SteelMeta = {
   qty: number;
   diameter: string; // ej: "3/4"
+  // Segundo diámetro (opcional, activado por checkbox "Agregar diámetro")
+  qty2?: number;
+  diameter2?: string;
 };
 
 export type SteelColRule = {
@@ -120,10 +123,16 @@ export type BastonCfg = {
   l1_enabled?: boolean;
   l1_qty?: number; // 1..3
   l1_diameter?: string; // ej: "3/4"
+  // Segundo diámetro L1 (opcional)
+  l1_qty2?: number;
+  l1_diameter2?: string;
 
   l2_enabled?: boolean;
   l2_qty?: number; // 1..3
   l2_diameter?: string; // ej: "3/4"
+  // Segundo diámetro L2 (opcional)
+  l2_qty2?: number;
+  l2_diameter2?: string;
 
   // Legacy (se acepta para compatibilidad; el normalizador lo mapea a l1/l2)
   enabled?: boolean;
@@ -219,6 +228,87 @@ export type Crossbeam = {
   span_index: number;  // Índice del tramo
 };
 
+export type DesignFace = 'top' | 'bottom';
+
+export type DesignSectionForceIn = {
+  location: string;
+  face: DesignFace;
+  Mu_tf_m: number;
+  Vu_tf: number;
+  station_m?: number;
+  span_index?: number;
+  role?: 'support_left' | 'midspan' | 'support_right';
+};
+
+export type DesignDemandCaseIn = {
+  name: string;
+  sections: DesignSectionForceIn[];
+};
+
+export type DesignReferenceFrameIn = {
+  beam: string;
+  story?: string;
+  order: number;
+  station_start_m: number;
+  station_end_m: number;
+  source_length_m: number;
+};
+
+export type DesignReferenceZoneIn = {
+  location: string;
+  face: DesignFace;
+  span_index: number;
+  role?: 'support_left' | 'midspan' | 'support_right';
+  start_m: number;
+  end_m: number;
+  ref_m: number;
+};
+
+export type DesignDemandReferenceIn = {
+  mode?: 'station_only' | 'geometry_projection' | 'scaled_geometry';
+  matched_label?: string;
+  matched_stories?: string[];
+  total_length_m: number;
+  source_total_length_m: number;
+  scale_factor: number;
+  frames?: DesignReferenceFrameIn[];
+  zones?: DesignReferenceZoneIn[];
+};
+
+export type DesignDemandsIn = {
+  source?: 'manual' | 'etabs' | 'imported';
+  cases: DesignDemandCaseIn[];
+  reference?: DesignDemandReferenceIn;
+  meta?: Record<string, unknown>;
+};
+
+export type ForceImportTarget = {
+  beam_id: string;
+  group_id?: string | null;
+  beam_type?: string;
+  floor_start?: string;
+  floor_end?: string;
+  excluded_levels?: string[];
+  development: DevelopmentIn;
+};
+
+export type ForceImportResult = {
+  beam_id: string;
+  group_id?: string | null;
+  matched: boolean;
+  development?: DevelopmentIn;
+  warnings: string[];
+  matched_stories: string[];
+  matched_cases: string[];
+};
+
+export type ForceImportResponse = {
+  results: ForceImportResult[];
+  warnings: string[];
+  detected_cases: string[];
+  parsed_sheets: string[];
+};
+
 export type DevelopmentIn = {
   name?: string;
   nodes: NodeIn[];
@@ -253,6 +343,9 @@ export type DevelopmentIn = {
 
   // Tipo de elemento longitudinal (UI-only por ahora)
   member_type?: MemberType; // default 'viga'
+
+  // Demandas estructurales para el modulo de diseño.
+  design_demands?: DesignDemandsIn;
 };
 
 export type PreviewRequest = {

@@ -1,5 +1,5 @@
 import { useCallback } from 'react';
-import type { DevelopmentIn, ExportMode, PreviewRequest, SpanIn } from '../types';
+import type { DevelopmentIn, ExportMode, ForceImportResponse, ForceImportTarget, PreviewRequest, SpanIn } from '../types';
 import type { AppConfig } from '../services';
 import {
   normalizeDev,
@@ -16,6 +16,8 @@ import {
 } from '../services/steelService';
 import {
   exportDxf,
+  importDesignForcesBatch,
+  importDesignForcesGroup,
   importDxf,
   importDxfBatch,
   saveState,
@@ -304,7 +306,11 @@ export function useApiActions({
       const b0 = config?.b ?? span1.b ?? INITIAL_SPAN.b ?? 0;
       let incoming: DevelopmentIn = {
         ...res.development,
-        spans: (res.development.spans ?? []).map((s: SpanIn) => ({ ...s, h: h0, b: b0 })),
+        spans: (res.development.spans ?? []).map((s: SpanIn) => ({
+          ...s,
+          b: s.b ?? b0,
+          h: s.h ?? h0,
+        })),
       };
 
       // Aplicar preferencia de acero en nodos y spans
@@ -326,13 +332,14 @@ export function useApiActions({
       }
 
       setDev(normalizeDev(incoming, appCfg));
+      setConcretoLocked(true);
       if (res.warnings?.length) setWarning(res.warnings.join('\n'));
     } catch (e: any) {
       setError(e?.message ?? String(e));
     } finally {
       setBusy(false);
     }
-  }, [dev, appCfg, defaultPref, setDev, setBusy, setError, setWarning]);
+  }, [dev, appCfg, defaultPref, setDev, setBusy, setError, setWarning, setConcretoLocked]);
 
   const applyJsonToForm = useCallback(() => {
     const parsed = safeParseJson<PreviewRequest>(jsonText);
@@ -384,7 +391,7 @@ export function useApiActions({
           spans: (d.spans ?? []).map((s: SpanIn) => ({
             ...s,
             b: s.b ?? b0,
-            h: h0,
+            h: s.h ?? h0,
           })),
         };
 
@@ -411,7 +418,7 @@ export function useApiActions({
       setActiveDevIdx(0);
       setSelection({ kind: 'none' });
       setDetailViewport(null);
-      setConcretoLocked(false);
+      setConcretoLocked(true);
       if (normalizedDevs.length > 1) setExportMode('all');
       if (res.warnings?.length) setWarning(res.warnings.join('\n'));
       return normalizedDevs;
@@ -422,6 +429,38 @@ export function useApiActions({
       setBusy(false);
     }
   }, [dev, appCfg, defaultPref, batchImportOrder, setDevelopments, setActiveDevIdx, setBusy, setError, setWarning, setSelection, setDetailViewport, setConcretoLocked]);
+
+  const onImportForcesGroupFile = useCallback(async (file: File, target: ForceImportTarget): Promise<ForceImportResponse> => {
+    try {
+      setBusy(true);
+      setError(null);
+      setWarning(null);
+      const response = await importDesignForcesGroup(file, target);
+      if (response.warnings?.length) setWarning(response.warnings.join('\n'));
+      return response;
+    } catch (e: any) {
+      setError(e?.message ?? String(e));
+      throw e;
+    } finally {
+      setBusy(false);
+    }
+  }, [setBusy, setError, setWarning]);
+
+  const onImportForcesBatchFile = useCallback(async (file: File, targets: ForceImportTarget[]): Promise<ForceImportResponse> => {
+    try {
+      setBusy(true);
+      setError(null);
+      setWarning(null);
+      const response = await importDesignForcesBatch(file, targets);
+      if (response.warnings?.length) setWarning(response.warnings.join('\n'));
+      return response;
+    } catch (e: any) {
+      setError(e?.message ?? String(e));
+      throw e;
+    } finally {
+      setBusy(false);
+    }
+  }, [setBusy, setError, setWarning]);
 
   const onExportMetrado = useCallback(async () => {
     try {
@@ -473,6 +512,8 @@ export function useApiActions({
     onClearTemplate,
     onImportDxfFile,
     onImportDxfBatchFile,
+    onImportForcesGroupFile,
+    onImportForcesBatchFile,
     applyJsonToForm,
   };
 }

@@ -209,6 +209,46 @@ const SteelTabInner: React.FC<SteelTabProps> = ({
             </div>
           ))}
 
+          <div className="cell rowLabel">Sup: +diámetro</div>
+          {(dev.spans ?? []).map((s, i) => {
+            const has2 = (s.steel_top?.qty2 ?? 0) > 0;
+            return (
+              <div className="cell" key={`steel-top-add2-${i}`} style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+                <input
+                  type="checkbox"
+                  checked={has2}
+                  onChange={(e) => {
+                    if (e.target.checked) updateSpanSteel(i, 'top', { qty2: 1, diameter2: s.steel_top?.diameter ?? '3/4' });
+                    else updateSpanSteel(i, 'top', { qty2: 0, diameter2: undefined });
+                  }}
+                />
+                {has2 && (
+                  <>
+                    <input
+                      className="cellInput"
+                      type="number" step="1" min={1}
+                      style={{ width: 36 }}
+                      value={s.steel_top?.qty2 ?? 1}
+                      onChange={(e) => updateSpanSteel(i, 'top', { qty2: Math.max(1, clampNumber(e.target.value, 1)) })}
+                    />
+                    <select
+                      className="cellInput"
+                      style={{ width: 52 }}
+                      value={String(s.steel_top?.diameter2 ?? '3/4')}
+                      onChange={(e) => updateSpanSteel(i, 'top', { diameter2: e.target.value })}
+                    >
+                      <option value="3/8">3/8</option>
+                      <option value="1/2">1/2</option>
+                      <option value="5/8">5/8</option>
+                      <option value="3/4">3/4</option>
+                      <option value="1">1</option>
+                    </select>
+                  </>
+                )}
+              </div>
+            );
+          })}
+
           <div className="cell rowLabel">Inferior: Cantidad</div>
           {(dev.spans ?? []).map((s, i) => (
             <div className="cell" key={`steel-bot-qty-${i}`}>
@@ -239,6 +279,46 @@ const SteelTabInner: React.FC<SteelTabProps> = ({
               </select>
             </div>
           ))}
+
+          <div className="cell rowLabel">Inf: +diámetro</div>
+          {(dev.spans ?? []).map((s, i) => {
+            const has2 = (s.steel_bottom?.qty2 ?? 0) > 0;
+            return (
+              <div className="cell" key={`steel-bot-add2-${i}`} style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+                <input
+                  type="checkbox"
+                  checked={has2}
+                  onChange={(e) => {
+                    if (e.target.checked) updateSpanSteel(i, 'bottom', { qty2: 1, diameter2: s.steel_bottom?.diameter ?? '3/4' });
+                    else updateSpanSteel(i, 'bottom', { qty2: 0, diameter2: undefined });
+                  }}
+                />
+                {has2 && (
+                  <>
+                    <input
+                      className="cellInput"
+                      type="number" step="1" min={1}
+                      style={{ width: 36 }}
+                      value={s.steel_bottom?.qty2 ?? 1}
+                      onChange={(e) => updateSpanSteel(i, 'bottom', { qty2: Math.max(1, clampNumber(e.target.value, 1)) })}
+                    />
+                    <select
+                      className="cellInput"
+                      style={{ width: 52 }}
+                      value={String(s.steel_bottom?.diameter2 ?? '3/4')}
+                      onChange={(e) => updateSpanSteel(i, 'bottom', { diameter2: e.target.value })}
+                    >
+                      <option value="3/8">3/8</option>
+                      <option value="1/2">1/2</option>
+                      <option value="5/8">5/8</option>
+                      <option value="3/4">3/4</option>
+                      <option value="1">1</option>
+                    </select>
+                  </>
+                )}
+              </div>
+            );
+          })}
         </div>
         </div></div>
       </div>

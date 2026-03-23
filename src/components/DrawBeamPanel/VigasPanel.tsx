@@ -1,18 +1,35 @@
-import React, { useMemo, useState } from 'react';
+﻿import React, { useMemo, useState } from 'react';
 import { C, NIVEL_COLOR, NIVEL_TYPES } from '../shared/tokens';
 import { Icon } from '../shared/Icon';
 import { Cap, Pill } from '../shared/primitives';
 import type { NivelType } from '../shared/tokens';
 import type { useBeams } from './useBeams';
+import type { DevelopmentIn, ForceImportResponse, ForceImportTarget } from '../../types';
 
 interface VigasPanelProps {
   ctx: ReturnType<typeof useBeams>;
+  onImportForcesBatchFile?: (file: File, targets: ForceImportTarget[]) => Promise<ForceImportResponse>;
+  onGroupDevelopmentLoad?: (dev: DevelopmentIn | undefined) => void;
 }
 
-export const VigasPanel: React.FC<VigasPanelProps> = ({ ctx }) => {
+const LEVEL_TYPE_MAP: Record<string, string> = { Piso: 'piso', 'Sótano': 'sotano', Azotea: 'azotea' };
+
+function syncDevMeta(dev: DevelopmentIn, beam: any, group: any): DevelopmentIn {
+  return {
+    ...dev,
+    name: beam.id ?? dev.name,
+    floor_start: group.nivelInicial ?? dev.floor_start,
+    floor_end: group.nivelFinal ?? dev.floor_end,
+    level_type: (LEVEL_TYPE_MAP[beam.type] ?? dev.level_type ?? 'piso') as DevelopmentIn['level_type'],
+  };
+}
+
+export const VigasPanel: React.FC<VigasPanelProps> = ({ ctx, onImportForcesBatchFile, onGroupDevelopmentLoad }) => {
   const [filter, setFilter] = useState<NivelType | 'Todas'>('Todas');
   const [selectionMode, setSelectionMode] = useState(false);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [importStatus, setImportStatus] = useState<string | null>(null);
+  const [importBusy, setImportBusy] = useState(false);
 
   const counts = useMemo(
     () =>
@@ -65,6 +82,55 @@ export const VigasPanel: React.FC<VigasPanelProps> = ({ ctx }) => {
     exitSelectionMode();
   };
 
+  const handleBatchForceImport = async (file: File) => {
+    const targets: ForceImportTarget[] = [];
+    for (const beam of ctx.beams) {
+      for (const group of beam.groups) {
+        if (!group.development) continue;
+        targets.push({
+          beam_id: beam.id,
+          group_id: group.id,
+          beam_type: beam.type,
+          floor_start: group.nivelInicial,
+          floor_end: group.nivelFinal,
+          excluded_levels: group.excludedLevels ?? [],
+          development: syncDevMeta(group.development, beam, group),
+        });
+      }
+    }
+    if (targets.length === 0) {
+      setImportStatus('No hay grupos con geometria cargada para importar fuerzas.');
+      return;
+    }
+    if (!onImportForcesBatchFile) {
+      setImportStatus('La importacion masiva de fuerzas no esta disponible en este flujo.');
+      return;
+    }
+    try {
+      setImportBusy(true);
+      setImportStatus(null);
+      const response = await onImportForcesBatchFile(file, targets);
+      const updates = response.results
+        .filter((result) => result.matched && result.group_id && result.development)
+        .map((result) => ({
+          beamId: result.beam_id,
+          groupId: result.group_id,
+          development: result.development!,
+        }));
+      ctx.applyGroupDevelopments(updates);
+      const selected = response.results.find(
+        (result) => result.group_id === ctx.selectedGroupId && result.beam_id === ctx.selectedBeamId && result.development,
+      );
+      if (selected?.development) onGroupDevelopmentLoad?.(selected.development);
+      const matched = response.results.filter((result) => result.matched).length;
+      setImportStatus(`Fuerzas importadas en ${matched}/${targets.length} grupo(s).`);
+    } catch (error: any) {
+      setImportStatus(error?.message ?? 'No se pudo importar fuerzas.');
+    } finally {
+      setImportBusy(false);
+    }
+  };
+
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
       <div style={{ display: 'flex', gap: 4, overflowX: 'auto', scrollbarWidth: 'none' }}>
@@ -84,6 +150,20 @@ export const VigasPanel: React.FC<VigasPanelProps> = ({ ctx }) => {
       </div>
 
       <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+        <label className="btnSmall btnSubtleAction" style={{ opacity: importBusy || !onImportForcesBatchFile ? 0.65 : 1, cursor: importBusy || !onImportForcesBatchFile ? 'default' : 'pointer' }}>
+          {importBusy ? 'Importando fuerzas...' : 'Importar fuerzas masivas'}
+          <input
+            type="file"
+            accept=".xlsx,.xlsm"
+            disabled={importBusy || !onImportForcesBatchFile}
+            style={{ display: 'none' }}
+            onChange={(e) => {
+              const file = e.target.files?.[0];
+              e.target.value = '';
+              if (file) void handleBatchForceImport(file);
+            }}
+          />
+        </label>
         {!selectionMode ? (
           <>
             <button
@@ -199,7 +279,7 @@ export const VigasPanel: React.FC<VigasPanelProps> = ({ ctx }) => {
                     <div style={{ fontFamily: 'JetBrains Mono, monospace', fontSize: 12, fontWeight: 900, color: selected ? C.text : C.sub }}>
                       {beam.id}
                     </div>
-                    <Cap ch={`${beam.type} � ${beam.groups.length} grupo(s)`} />
+                    <Cap ch={`${beam.type} · ${beam.groups.length} grupo(s)`} />
                   </div>
 
                   {!selectionMode ? (
@@ -247,6 +327,12 @@ export const VigasPanel: React.FC<VigasPanelProps> = ({ ctx }) => {
           No se pudo guardar. Los cambios pueden perderse al recargar.
         </div>
       )}
+      {importStatus && (
+        <div style={{ fontSize: 10, color: C.sub, textAlign: 'center', padding: '6px 8px', border: `1px solid ${C.border}`, borderRadius: 5 }}>
+          {importStatus}
+        </div>
+      )}
     </div>
   );
 };
+

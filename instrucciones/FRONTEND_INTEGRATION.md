@@ -18,7 +18,7 @@
 
 ### Desarrollo Local
 ```javascript
-const API_URL = 'http://localhost:8000';
+const API_URL = 'http://localhost:8001';
 ```
 
 ### Producción (después de desplegar en Render)
@@ -28,12 +28,12 @@ const API_URL = 'https://beamdraw-backend.onrender.com';
 
 **Recomendación**: Usar variable de entorno
 ```javascript
-const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000';
+const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8001';
 ```
 
 Archivo `.env.local` en el frontend:
 ```env
-VITE_API_URL=http://localhost:8000
+VITE_API_URL=http://localhost:8001
 ```
 
 Archivo `.env.production`:
@@ -351,7 +351,7 @@ async function saveProjectWithRetry(developments, retries = 3) {
 - [ ] Cargar proyecto al iniciar la aplicación
 - [ ] Agregar health checks
 - [ ] Manejar errores de red y timeouts
-- [ ] Probar en desarrollo local (localhost:8000)
+- [ ] Probar en desarrollo local (localhost:8001)
 - [ ] Actualizar URL de producción después del deploy
 - [ ] Verificar CORS si frontend está en otro dominio
 

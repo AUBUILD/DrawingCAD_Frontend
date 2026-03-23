@@ -19,7 +19,7 @@ npm run dev
 
 Abrir: http://localhost:5178
 
-El dev server proxyea `/api/*` hacia `http://localhost:8000` (backend).
+El dev server proxyea `/api/*` hacia `http://localhost:8001` (backend).
 
 ## Scripts
 
@@ -33,7 +33,7 @@ El dev server proxyea `/api/*` hacia `http://localhost:8000` (backend).
 
 | Variable | Descripcion | Default |
 |----------|-------------|---------|
-| `VITE_API_URL` | URL base del backend | _(proxy a localhost:8000)_ |
+| `VITE_API_URL` | URL base del backend | _(proxy a localhost:8001)_ |
 
 En produccion, definir `VITE_API_URL` apuntando al backend (ej: `https://beamdraw-backend.onrender.com`).
 
@@ -162,5 +162,5 @@ El repo incluye `render.yaml` para despliegue como Static Site:
 
 ### Reverse proxy (alternativa)
 
-Servir `dist/` con Nginx/Apache y reenviar `/api/*` al backend en puerto 8000.
+Servir `dist/` con Nginx/Apache y reenviar `/api/*` al backend en puerto 8001.
 No requiere CORS ni `VITE_API_URL`.

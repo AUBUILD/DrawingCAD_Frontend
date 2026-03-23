@@ -6,6 +6,7 @@ interface TopNavbarProps {
   sideOpen: boolean;
   setSideOpen: (open: boolean) => void;
   beamCode?: string;
+  projectName?: string;
   userEmail: string;
   onOpenProjects: () => void;
   onLogout: () => void;
@@ -15,6 +16,7 @@ export const TopNavbar: React.FC<TopNavbarProps> = ({
   sideOpen,
   setSideOpen,
   beamCode,
+  projectName,
   userEmail,
   onOpenProjects,
   onLogout,
@@ -45,7 +47,7 @@ export const TopNavbar: React.FC<TopNavbarProps> = ({
       </button>
 
       <div className="aubBeamCtx">
-        <div className="aubBeamSub">DrawingCAD Beam</div>
+        <div className="aubBeamSub">DrawingCAD Beam{projectName ? <span style={{ color: '#00c9a7', marginLeft: 8 }}>{projectName}</span> : null}</div>
       </div>
 
       <div style={{ flex: 1 }} />

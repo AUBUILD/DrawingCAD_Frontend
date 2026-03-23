@@ -1,4 +1,4 @@
-import React from 'react';
+﻿import React from 'react';
 import { DrawBeamPanel } from '../components/DrawBeamPanel';
 import type { EditorTabProps } from '../components/DrawBeamPanel';
 import type { ConfigTabProps } from '../tabs/ConfigTab';
@@ -8,7 +8,7 @@ import type { SteelTabProps } from '../tabs/SteelTab';
 import type { MetradoTabProps } from '../tabs/MetradoTab';
 import type { JsonTabProps } from '../tabs/JsonTab';
 import type { DefaultPreferenceId } from '../utils';
-import type { DevelopmentIn, ExportMode } from '../types';
+import type { DevelopmentIn, ExportMode, ForceImportResponse, ForceImportTarget } from '../types';
 
 type Tab = 'config' | 'proyecto' | 'concreto' | 'acero' | 'metrado' | 'json';
 
@@ -37,6 +37,8 @@ export interface LeftPanelProps {
   setExportOrder: (order: 'name' | 'location') => void;
   onImportDxfFile: (file: File, config?: { h?: number; b?: number }) => void;
   onImportDxfBatchFile: (file: File, config?: { h?: number; b?: number }) => Promise<import('../types').DevelopmentIn[]>;
+  onImportForcesBatchFile?: (file: File, targets: ForceImportTarget[]) => Promise<ForceImportResponse>;
+  onImportForcesGroupFile?: (file: File, target: ForceImportTarget) => Promise<ForceImportResponse>;
   batchImportOrder: 'name' | 'location';
   setBatchImportOrder: React.Dispatch<React.SetStateAction<'name' | 'location'>>;
 }
@@ -62,6 +64,8 @@ export const LeftPanel: React.FC<LeftPanelProps> = ({
   setExportOrder,
   onImportDxfFile,
   onImportDxfBatchFile,
+  onImportForcesBatchFile,
+  onImportForcesGroupFile,
   batchImportOrder,
   setBatchImportOrder,
 }) => {
@@ -93,6 +97,8 @@ export const LeftPanel: React.FC<LeftPanelProps> = ({
           setExportOrder={setExportOrder}
           onImportDxfFile={onImportDxfFile}
           onImportDxfBatchFile={onImportDxfBatchFile}
+          onImportForcesBatchFile={onImportForcesBatchFile}
+          onImportForcesGroupFile={onImportForcesGroupFile}
           batchImportOrder={batchImportOrder}
           setBatchImportOrder={setBatchImportOrder}
         />
@@ -100,3 +106,4 @@ export const LeftPanel: React.FC<LeftPanelProps> = ({
     </div>
   );
 };
+

@@ -1,5 +1,5 @@
 import React, { useCallback } from 'react';
-import type { SpanIn, NodeIn, SteelKind } from '../types';
+import type { SpanIn, NodeIn, SteelKind, SteelMeta } from '../types';
 import { PopoverShell } from './PopoverShell';
 
 // ============================================================================
@@ -18,7 +18,7 @@ interface SpanSteelProps {
   anchorY: number;
   containerRect: DOMRect | null;
   onClose: () => void;
-  onUpdateSpanSteel: (spanIdx: number, side: 'top' | 'bottom', patch: Partial<{ qty: number; diameter: string }>) => void;
+  onUpdateSpanSteel: (spanIdx: number, side: 'top' | 'bottom', patch: Partial<SteelMeta>) => void;
 }
 
 export const SpanSteelPopover: React.FC<SpanSteelProps> = ({
@@ -26,8 +26,15 @@ export const SpanSteelPopover: React.FC<SpanSteelProps> = ({
 }) => {
   const topQty = span.steel_top?.qty ?? 2;
   const topDia = span.steel_top?.diameter ?? '5/8';
+  const topHas2 = (span.steel_top?.qty2 ?? 0) > 0;
+  const topQty2 = span.steel_top?.qty2 ?? 1;
+  const topDia2 = span.steel_top?.diameter2 ?? '5/8';
+
   const botQty = span.steel_bottom?.qty ?? 2;
   const botDia = span.steel_bottom?.diameter ?? '5/8';
+  const botHas2 = (span.steel_bottom?.qty2 ?? 0) > 0;
+  const botQty2 = span.steel_bottom?.qty2 ?? 1;
+  const botDia2 = span.steel_bottom?.diameter2 ?? '5/8';
 
   return (
     <PopoverShell
@@ -54,6 +61,39 @@ export const SpanSteelPopover: React.FC<SpanSteelProps> = ({
           {DIAMETERS.map((d) => <option key={d} value={d}>{d}"</option>)}
         </select>
       </div>
+      {topHas2 && (
+        <div className="soRow">
+          <span className="soLabel">Qty</span>
+          <input
+            className="soInput soInput--sm"
+            type="number" min={1} max={10} step={1}
+            value={topQty2}
+            onChange={(e) => onUpdateSpanSteel(spanIdx, 'top', { qty2: Math.max(1, Number(e.target.value) || 1) })}
+          />
+          <span className="soLabel">⌀</span>
+          <select
+            className="soSelect"
+            value={topDia2}
+            onChange={(e) => onUpdateSpanSteel(spanIdx, 'top', { diameter2: e.target.value })}
+          >
+            {DIAMETERS.map((d) => <option key={d} value={d}>{d}"</option>)}
+          </select>
+        </div>
+      )}
+      <label className="soCheck" style={{ marginTop: 2 }}>
+        <input
+          type="checkbox"
+          checked={topHas2}
+          onChange={(e) => {
+            if (e.target.checked) {
+              onUpdateSpanSteel(spanIdx, 'top', { qty2: 1, diameter2: topDia });
+            } else {
+              onUpdateSpanSteel(spanIdx, 'top', { qty2: 0, diameter2: undefined });
+            }
+          }}
+        />
+        <span>Agregar diametro</span>
+      </label>
 
       <hr className="soDivider" />
 
@@ -76,6 +116,39 @@ export const SpanSteelPopover: React.FC<SpanSteelProps> = ({
           {DIAMETERS.map((d) => <option key={d} value={d}>{d}"</option>)}
         </select>
       </div>
+      {botHas2 && (
+        <div className="soRow">
+          <span className="soLabel">Qty</span>
+          <input
+            className="soInput soInput--sm"
+            type="number" min={1} max={10} step={1}
+            value={botQty2}
+            onChange={(e) => onUpdateSpanSteel(spanIdx, 'bottom', { qty2: Math.max(1, Number(e.target.value) || 1) })}
+          />
+          <span className="soLabel">⌀</span>
+          <select
+            className="soSelect"
+            value={botDia2}
+            onChange={(e) => onUpdateSpanSteel(spanIdx, 'bottom', { diameter2: e.target.value })}
+          >
+            {DIAMETERS.map((d) => <option key={d} value={d}>{d}"</option>)}
+          </select>
+        </div>
+      )}
+      <label className="soCheck" style={{ marginTop: 2 }}>
+        <input
+          type="checkbox"
+          checked={botHas2}
+          onChange={(e) => {
+            if (e.target.checked) {
+              onUpdateSpanSteel(spanIdx, 'bottom', { qty2: 1, diameter2: botDia });
+            } else {
+              onUpdateSpanSteel(spanIdx, 'bottom', { qty2: 0, diameter2: undefined });
+            }
+          }}
+        />
+        <span>Agregar diametro</span>
+      </label>
     </PopoverShell>
   );
 };

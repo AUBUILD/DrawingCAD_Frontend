@@ -1,8 +1,8 @@
-import React, { useMemo, useState } from 'react';
+﻿import React, { useCallback, useMemo, useState } from 'react';
 import { DrawBeamPanel, type EditorTabProps } from '../DrawBeamPanel';
 import { Icon, type IconName } from '../shared/Icon';
 import { T } from '../../styles/tokens';
-import type { DevelopmentIn, ExportMode } from '../../types';
+import type { DevelopmentIn, ExportMode, ForceImportResponse, ForceImportTarget } from '../../types';
 import type { PanelView } from '../DrawBeamPanel/types';
 
 interface LeftSidebarProps {
@@ -23,14 +23,17 @@ interface LeftSidebarProps {
   setExportOrder: (order: 'name' | 'location') => void;
   onImportDxfFile: (file: File, config?: { h?: number; b?: number }) => void;
   onImportDxfBatchFile: (file: File, config?: { h?: number; b?: number }) => Promise<import('../../types').DevelopmentIn[]>;
+  onImportForcesBatchFile?: (file: File, targets: ForceImportTarget[]) => Promise<ForceImportResponse>;
+  onImportForcesGroupFile?: (file: File, target: ForceImportTarget) => Promise<ForceImportResponse>;
   batchImportOrder: 'name' | 'location';
   setBatchImportOrder: React.Dispatch<React.SetStateAction<'name' | 'location'>>;
   onAllGroupDevsChange?: (devs: DevelopmentIn[]) => void;
+  onPanelViewChange?: (view: PanelView) => void;
 }
 
 const L1_TABS: Array<{ id: PanelView; icon: IconName; label: string }> = [
   { id: 'vigas', icon: 'vigas', label: 'Vigas' },
-  { id: 'nueva', icon: 'plus', label: '+ Nueva' },
+  { id: 'nueva', icon: 'plus', label: 'Nueva' },
   { id: 'config', icon: 'cfg', label: 'Config' },
   { id: 'exportar', icon: 'export', label: 'Exportar' },
 ];
@@ -53,11 +56,18 @@ export const LeftSidebar: React.FC<LeftSidebarProps> = ({
   setExportOrder,
   onImportDxfFile,
   onImportDxfBatchFile,
+  onImportForcesBatchFile,
+  onImportForcesGroupFile,
   batchImportOrder,
   setBatchImportOrder,
   onAllGroupDevsChange,
+  onPanelViewChange,
 }) => {
-  const [activePrimary, setActivePrimary] = useState<PanelView>('vigas');
+  const [activePrimary, setActivePrimaryRaw] = useState<PanelView>('vigas');
+  const setActivePrimary = useCallback((v: PanelView) => {
+    setActivePrimaryRaw(v);
+    onPanelViewChange?.(v);
+  }, [onPanelViewChange]);
 
   const miniTabs = useMemo(() => L1_TABS, []);
 
@@ -96,6 +106,8 @@ export const LeftSidebar: React.FC<LeftSidebarProps> = ({
               storageKey={beamsStorageKey}
               onImportDxfFile={onImportDxfFile}
               onImportDxfBatchFile={onImportDxfBatchFile}
+              onImportForcesBatchFile={onImportForcesBatchFile}
+              onImportForcesGroupFile={onImportForcesGroupFile}
               batchImportOrder={batchImportOrder}
               setBatchImportOrder={setBatchImportOrder}
               onAllGroupDevsChange={onAllGroupDevsChange}
@@ -130,3 +142,5 @@ export const LeftSidebar: React.FC<LeftSidebarProps> = ({
     </>
   );
 };
+
+
