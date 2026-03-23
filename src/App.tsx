@@ -696,7 +696,7 @@ export default function App() {
     selectedBastonDetailSpans,
     quantityDisplay,
     quantityCutsXU: [sectionXU, ...savedCuts.map((c) => c.xU)],
-    selection, steelViewPinned, sectionXU,
+    selection, steelViewPinned, sectionXU, busy,
   });
 
   useOverviewCanvas({

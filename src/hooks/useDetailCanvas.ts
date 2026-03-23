@@ -28,6 +28,7 @@ interface UseDetailCanvasParams {
   selection: any;
   steelViewPinned: boolean;
   sectionXU: number;
+  busy: boolean;
 }
 
 export function useDetailCanvas({
@@ -51,6 +52,7 @@ export function useDetailCanvas({
   selection,
   steelViewPinned,
   sectionXU,
+  busy,
 }: UseDetailCanvasParams) {
   const previewDrawRafRef = useRef<number | null>(null);
   const previewOverlayRafRef = useRef<number | null>(null);
@@ -107,7 +109,9 @@ export function useDetailCanvas({
       }
 
       // Dibujar acero en un segundo frame para evitar bloquear la primera pintura.
-      if (preview && renderBounds && steelViewActive && ((showLongitudinal || showStirrups) || Boolean(quantityDisplay?.enabled))) {
+      // No dibujar steel overlay si el preview está desactualizado (busy) para evitar
+      // desincronización visual entre casco (preview viejo) y acero (dev nuevo).
+      if (!busy && preview && renderBounds && steelViewActive && ((showLongitudinal || showStirrups) || Boolean(quantityDisplay?.enabled))) {
         previewOverlayRafRef.current = window.requestAnimationFrame(() => {
           try {
             // Vista de acero activa (pestaña Acero o anclada): dibujar overlay 2D.
@@ -141,6 +145,7 @@ export function useDetailCanvas({
     };
   }, [
     preview,
+    busy,
     showNT,
     selection,
     detailViewport,
