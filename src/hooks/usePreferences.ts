@@ -12,6 +12,7 @@ import {
   applyBasicBastonesPreferenceToNodes,
   applyBasicBastonesPreferenceToSpans,
   classifySpansDesignMode,
+  applyStirrupsDefaultsByDesignMode,
   resetAllSteel,
 } from '../services/steelService';
 import {
@@ -131,6 +132,9 @@ export function usePreferences({
       // Clasificar spans como sismico/gravedad segun nodos de apoyo
       classifySpansDesignMode(updatedSpans, updatedNodes);
 
+      // Asignar specs de estribos segun design_mode (sismico/gravedad) y H
+      applyStirrupsDefaultsByDesignMode(updatedSpans);
+
       return { ...prev, nodes: updatedNodes, spans: updatedSpans };
     });
   }, [dev, setDev, setAppCfg, setHookLegDraft, setSlabProjOffsetDraft, setSlabProjLayerDraft, setCascoLayer, setSteelLayer]);
@@ -175,6 +179,9 @@ export function usePreferences({
 
       // Clasificar spans como sismico/gravedad segun nodos de apoyo
       classifySpansDesignMode(updatedSpans, updatedNodes);
+
+      // Asignar specs de estribos segun design_mode (sismico/gravedad) y H
+      applyStirrupsDefaultsByDesignMode(updatedSpans);
 
       return { ...prev, nodes: updatedNodes, spans: updatedSpans };
     });

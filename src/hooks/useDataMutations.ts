@@ -22,7 +22,7 @@ import {
   INITIAL_NODE,
   type AppConfig,
 } from '../services';
-import { applyBasicPreferenceToNodes, applyBasicPreferenceToSpans, applyBasicBastonesPreferenceToSpans, applyBasicBastonesPreferenceToNodes } from '../services/steelService';
+import { applyBasicPreferenceToNodes, applyBasicPreferenceToSpans, applyBasicBastonesPreferenceToSpans, applyBasicBastonesPreferenceToNodes, classifySpansDesignMode, applyStirrupsDefaultsByDesignMode } from '../services/steelService';
 import type { DefaultPreferenceId } from '../utils';
 
 export function useDataMutations(
@@ -68,7 +68,15 @@ export function useDataMutations(
   const updateNode = useCallback((nodeIdx: number, patch: Partial<NodeIn>) => {
     setDev((prev) => {
       const nodes = (prev.nodes ?? []).map((n, i) => (i === nodeIdx ? { ...n, ...patch } : n));
-      return normalizeDev({ ...prev, nodes } as DevelopmentIn, appCfg);
+      const spans = [...(prev.spans ?? [])];
+
+      // Si cambio support_type, re-clasificar stirrups de spans adyacentes
+      if ('support_type' in patch) {
+        classifySpansDesignMode(spans, nodes);
+        applyStirrupsDefaultsByDesignMode(spans);
+      }
+
+      return normalizeDev({ ...prev, nodes, spans } as DevelopmentIn, appCfg);
     });
   }, [setDev, appCfg]);
 

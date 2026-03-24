@@ -299,7 +299,14 @@ const ConcreteTabInner: React.FC<ConcreteTabProps> = ({
                     className="cellInput"
                     value={n.support_type ?? 'columna_inferior'}
                     disabled={concretoLocked}
-                    onChange={(e) => updateNode(i, { support_type: e.target.value as any })}
+                    onChange={(e) => {
+                      const st = e.target.value as any;
+                      const noProjection = st === 'apoyo_intermedio' || st === 'ninguno';
+                      updateNode(i, {
+                        support_type: st,
+                        ...(noProjection ? { project_a: false, project_b: false } : {}),
+                      });
+                    }}
                     onFocus={() => applySelection({ kind: 'node', index: i }, true)}
                     data-grid="nodes"
                     data-row={5}

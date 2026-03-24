@@ -186,7 +186,7 @@ export const EstribosPopover: React.FC<Props> = ({
           value={secDia}
           onChange={(e) => onUpdateStirrupsSection(spanIdx, { diameter: e.target.value })}
         >
-          {DIAMETERS.map((d) => <option key={d} value={d}>{d}"</option>)}
+          {DIAMETERS.map((d) => <option key={d} value={d}>{d}{d.toLowerCase().endsWith('mm') ? '' : '"'}</option>)}
         </select>
         <span className="soLabel">Lazos</span>
         <input
@@ -205,7 +205,7 @@ export const EstribosPopover: React.FC<Props> = ({
           value={diameter}
           onChange={(e) => onUpdateStirrups(spanIdx, { diameter: e.target.value })}
         >
-          {DIAMETERS.map((d) => <option key={d} value={d}>{d}"</option>)}
+          {DIAMETERS.map((d) => <option key={d} value={d}>{d}{d.toLowerCase().endsWith('mm') ? '' : '"'}</option>)}
         </select>
       </div>
     </PopoverShell>

@@ -3,6 +3,7 @@
  */
 
 import type { NodeIn, SpanIn, SteelKind, SupportType } from '../types';
+import { pickDefaultABCRForH, formatStirrupsABCR } from '../utils/stirrupsUtils';
 
 // ============================================================================
 // CONSTANTS
@@ -178,10 +179,14 @@ export function classifySpansDesignMode(spans: SpanIn[], nodes: NodeIn[]): SpanI
   for (let i = 0; i < spans.length; i++) {
     const leftNode = nodes[i];
     const rightNode = nodes[i + 1];
-    const leftHasSupport = leftNode?.support_type != null
-      && leftNode.support_type !== 'ninguno';
-    const rightHasSupport = rightNode?.support_type != null
-      && rightNode.support_type !== 'ninguno';
+    // Un nodo sin support_type (null/undefined) se trata como 'columna_inferior' (default)
+    // Tipos que generan zona sismica: columna_inferior, columna_superior, placa
+    // Tipos que NO generan zona sismica: apoyo_intermedio, ninguno
+    const leftSt = leftNode?.support_type ?? 'columna_inferior';
+    const rightSt = rightNode?.support_type ?? 'columna_inferior';
+    const SEISMIC_TYPES = new Set(['columna_inferior', 'columna_superior', 'placa']);
+    const leftHasSupport = SEISMIC_TYPES.has(leftSt);
+    const rightHasSupport = SEISMIC_TYPES.has(rightSt);
     const mode = (leftHasSupport || rightHasSupport) ? 'sismico' : 'gravedad';
 
     // Assign design_mode to stirrups if they exist, or create minimal stirrups config
@@ -190,6 +195,45 @@ export function classifySpansDesignMode(spans: SpanIn[], nodes: NodeIn[]): SpanI
       stirrups.design_mode = mode;
     } else {
       (spans[i] as any).stirrups = { design_mode: mode };
+    }
+  }
+  return spans;
+}
+
+/**
+ * Aplica specs de estribos por defecto segun design_mode de cada span.
+ * Debe llamarse DESPUES de classifySpansDesignMode() para que design_mode este asignado.
+ * Sobrescribe left_spec/center_spec/right_spec con los defaults de la tabla ABCR.
+ */
+export function applyStirrupsDefaultsByDesignMode(spans: SpanIn[]): SpanIn[] {
+  for (const span of spans) {
+    const stirrups = (span as any).stirrups;
+    const mode = String(stirrups?.design_mode ?? 'sismico').toLowerCase();
+    const modeKey: 'sismico' | 'gravedad' = mode === 'gravedad' ? 'gravedad' : 'sismico';
+    const h = Number((span as any).h) || 0.5;
+    const spec = formatStirrupsABCR(pickDefaultABCRForH(h, modeKey));
+    const ct = String(stirrups?.case_type ?? 'simetrica').toLowerCase();
+    if (!stirrups) {
+      (span as any).stirrups = {
+        case_type: 'simetrica',
+        design_mode: modeKey,
+        diameter: '8mm',
+        left_spec: spec,
+        center_spec: spec,
+        right_spec: spec,
+      };
+    } else {
+      stirrups.design_mode = modeKey;
+      stirrups.diameter = stirrups.diameter || '8mm';
+      if (ct === 'simetrica') {
+        stirrups.center_spec = spec;
+        stirrups.left_spec = spec;
+        stirrups.right_spec = spec;
+      } else {
+        stirrups.left_spec = spec;
+        stirrups.center_spec = spec;
+        stirrups.right_spec = spec;
+      }
     }
   }
   return spans;

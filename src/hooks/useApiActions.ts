@@ -14,6 +14,7 @@ import {
   applyBasicPreferenceToSpans,
   applyBasicBastonesPreferenceToNodes,
   applyBasicBastonesPreferenceToSpans,
+  applyStirrupsDefaultsByDesignMode,
 } from '../services/steelService';
 import {
   exportDxf,
@@ -399,19 +400,21 @@ export function useApiActions({
           })),
         };
 
-        // Aplicar preferencia de acero
+        // Aplicar preferencia de acero (pero preservar design_mode del backend)
         if (defaultPref === 'basico' || defaultPref === 'basico_bastones') {
           const applyN = defaultPref === 'basico_bastones' ? applyBasicBastonesPreferenceToNodes : applyBasicPreferenceToNodes;
           let updatedNodes = incoming.nodes;
-          let updatedSpans = incoming.spans;
+          let updatedSpans = [...(incoming.spans ?? [])];
           if (incoming.nodes && incoming.nodes.length > 0) {
             updatedNodes = applyN([...incoming.nodes]);
           }
-          if (incoming.spans && incoming.spans.length > 0) {
+          if (updatedSpans.length > 0) {
             updatedSpans = defaultPref === 'basico_bastones'
-              ? applyBasicBastonesPreferenceToSpans([...incoming.spans], updatedNodes)
-              : applyBasicPreferenceToSpans([...incoming.spans]);
+              ? applyBasicBastonesPreferenceToSpans(updatedSpans, updatedNodes)
+              : applyBasicPreferenceToSpans(updatedSpans);
           }
+          // Preservar design_mode del backend y asignar estribos correctos
+          applyStirrupsDefaultsByDesignMode(updatedSpans);
           incoming = { ...incoming, nodes: updatedNodes, spans: updatedSpans };
         }
 
