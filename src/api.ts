@@ -297,6 +297,18 @@ export async function saveState(payload: PreviewRequest, opts?: SaveLoadOpts): P
   if (!res.ok) return parseError(res);
 }
 
+export async function scanDxfSections(file: File): Promise<{ b: number | null; h: number | null }> {
+  const fd = new FormData();
+  fd.append('file', file);
+  try {
+    const res = await fetch(`${BASE}/api/scan-dxf-sections`, { method: 'POST', headers: authHeaders(), body: fd });
+    if (!res.ok) return { b: null, h: null };
+    return res.json();
+  } catch {
+    return { b: null, h: null };
+  }
+}
+
 export async function importDxf(file: File): Promise<ImportDxfResponse> {
   const fd = new FormData();
   fd.append('file', file);

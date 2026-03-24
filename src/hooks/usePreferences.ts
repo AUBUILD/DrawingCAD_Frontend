@@ -11,6 +11,7 @@ import {
   applyBasicPreferenceToSpans,
   applyBasicBastonesPreferenceToNodes,
   applyBasicBastonesPreferenceToSpans,
+  classifySpansDesignMode,
   resetAllSteel,
 } from '../services/steelService';
 import {
@@ -127,6 +128,9 @@ export function usePreferences({
       // Aplicar configuración a spans (acero corrido 2Ø5/8")
       applyBasicPreferenceToSpans(updatedSpans);
 
+      // Clasificar spans como sismico/gravedad segun nodos de apoyo
+      classifySpansDesignMode(updatedSpans, updatedNodes);
+
       return { ...prev, nodes: updatedNodes, spans: updatedSpans };
     });
   }, [dev, setDev, setAppCfg, setHookLegDraft, setSlabProjOffsetDraft, setSlabProjLayerDraft, setCascoLayer, setSteelLayer]);
@@ -168,6 +172,9 @@ export function usePreferences({
       // Primero nodos (define kinds), luego spans (necesita nodos para saber dónde ancla)
       applyBasicBastonesPreferenceToNodes(updatedNodes);
       applyBasicBastonesPreferenceToSpans(updatedSpans, updatedNodes);
+
+      // Clasificar spans como sismico/gravedad segun nodos de apoyo
+      classifySpansDesignMode(updatedSpans, updatedNodes);
 
       return { ...prev, nodes: updatedNodes, spans: updatedSpans };
     });

@@ -163,6 +163,38 @@ export function calculateNodeSteelLength(node: NodeIn, defaultLength: number = 0
 // PREFERENCIA 01: BÃSICO - ConfiguraciÃ³n automÃ¡tica de acero en nodos
 // ============================================================================
 
+// ============================================================================
+// DESIGN MODE AUTO-CLASSIFICATION (sismico / gravedad)
+// ============================================================================
+
+/**
+ * Clasifica cada span como 'sismico' o 'gravedad' basandose en los nodos adyacentes.
+ * Un span es sismico si al menos uno de sus nodos tiene apoyo (support_type != 'ninguno').
+ * Un span es gravedad si AMBOS nodos adyacentes no tienen apoyo.
+ *
+ * Modifica spans in-place y retorna el array.
+ */
+export function classifySpansDesignMode(spans: SpanIn[], nodes: NodeIn[]): SpanIn[] {
+  for (let i = 0; i < spans.length; i++) {
+    const leftNode = nodes[i];
+    const rightNode = nodes[i + 1];
+    const leftHasSupport = leftNode?.support_type != null
+      && leftNode.support_type !== 'ninguno';
+    const rightHasSupport = rightNode?.support_type != null
+      && rightNode.support_type !== 'ninguno';
+    const mode = (leftHasSupport || rightHasSupport) ? 'sismico' : 'gravedad';
+
+    // Assign design_mode to stirrups if they exist, or create minimal stirrups config
+    const stirrups = (spans[i] as any).stirrups;
+    if (stirrups) {
+      stirrups.design_mode = mode;
+    } else {
+      (spans[i] as any).stirrups = { design_mode: mode };
+    }
+  }
+  return spans;
+}
+
 /**
  * Constantes para la Preferencia 01: BÃ¡sico
  */

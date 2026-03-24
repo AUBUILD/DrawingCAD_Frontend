@@ -1,7 +1,9 @@
-import React, { useMemo, useRef, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { C, NIVEL_COLOR, NIVEL_TYPES, ORDINALS, PAD, PREFIX } from '../shared/tokens';
 import { Icon } from '../shared/Icon';
 import { Cap, SectionTitle } from '../shared/primitives';
+import { pickDefaultABCRForH, formatStirrupsABCR } from '../../utils/stirrupsUtils';
+import { scanDxfSections } from '../../api';
 import type { NivelType, Ordinal } from '../shared/tokens';
 import type { useBeams } from './useBeams';
 import type { DevelopmentIn } from '../../types';
@@ -97,6 +99,31 @@ const OrdinalPickers: React.FC<{
   );
 };
 
+/** Preview de estribos asignados segun H seleccionado */
+const StirrupsPreview: React.FC<{ h: number }> = ({ h }) => {
+  const sismico = useMemo(() => pickDefaultABCRForH(h, 'sismico'), [h]);
+  const gravedad = useMemo(() => pickDefaultABCRForH(h, 'gravedad'), [h]);
+  const rowStyle: React.CSSProperties = {
+    display: 'grid', gridTemplateColumns: '70px 1fr', gap: 4,
+    fontSize: 10, lineHeight: 1.5,
+  };
+  return (
+    <div style={{ background: `${C.teal}08`, border: `1px solid ${C.border}`, borderRadius: 6, padding: '6px 8px' }}>
+      <Cap ch={`Estribado asignado (h=${h.toFixed(2)}m)`} />
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 4, marginTop: 4 }}>
+        <div style={rowStyle}>
+          <span style={{ color: C.orange, fontWeight: 700 }}>Sismico:</span>
+          <span style={{ color: C.text, fontFamily: 'JetBrains Mono, monospace' }}>{formatStirrupsABCR(sismico)}</span>
+        </div>
+        <div style={rowStyle}>
+          <span style={{ color: C.blue, fontWeight: 700 }}>Gravedad:</span>
+          <span style={{ color: C.text, fontFamily: 'JetBrains Mono, monospace' }}>{formatStirrupsABCR(gravedad)}</span>
+        </div>
+      </div>
+    </div>
+  );
+};
+
 export const NuevaPanel: React.FC<NuevaPanelProps> = ({
   ctx, busy, onImportDxfFile, onImportDxfBatchFile, batchImportOrder, setBatchImportOrder,
 }) => {
@@ -140,6 +167,18 @@ export const NuevaPanel: React.FC<NuevaPanelProps> = ({
     setDxfB(0.25);
     setBatchPreview([]);
   };
+
+  // Pre-scan: extraer seccion dominante del DXF para pre-llenar b/h defaults
+  useEffect(() => {
+    if (!pendingFile || (mode !== 'dxf-config' && mode !== 'batch-config')) return;
+    let cancelled = false;
+    scanDxfSections(pendingFile).then((res) => {
+      if (cancelled) return;
+      if (res.b != null && res.b > 0) setDxfB(res.b);
+      if (res.h != null && res.h > 0) setDxfH(res.h);
+    });
+    return () => { cancelled = true; };
+  }, [pendingFile, mode]);
 
   // ── Step 0: Pick creation mode ──
   if (mode === 'pick') {
@@ -467,6 +506,8 @@ export const NuevaPanel: React.FC<NuevaPanelProps> = ({
           </div>
         </div>
 
+        <StirrupsPreview h={dxfH} />
+
         <button
           type="button"
           disabled={!tipo || busy || cfgNumExists}
@@ -542,6 +583,8 @@ export const NuevaPanel: React.FC<NuevaPanelProps> = ({
             />
           </div>
         </div>
+
+        <StirrupsPreview h={dxfH} />
 
         {/* Batch order */}
         <div style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
