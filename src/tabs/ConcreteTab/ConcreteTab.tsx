@@ -207,7 +207,7 @@ const ConcreteTabInner: React.FC<ConcreteTabProps> = ({
                     fmt={fmt2}
                     parse={clampNumber}
                     onChange={(v) => updateNode(i, { b1: v })}
-                    onKeyDown={(e) => onGridKeyDown(e, 'nodes', 0, i, 5, nodesCols)}
+                    onKeyDown={(e) => onGridKeyDown(e, 'nodes', 0, i, 6, nodesCols)}
                     onFocus={() => applySelection({ kind: 'node', index: i }, true)}
                     data-grid="nodes"
                     data-row={0}
@@ -226,7 +226,7 @@ const ConcreteTabInner: React.FC<ConcreteTabProps> = ({
                     fmt={fmt2}
                     parse={clampNumber}
                     onChange={(v) => updateNode(i, { b2: v })}
-                    onKeyDown={(e) => onGridKeyDown(e, 'nodes', 1, i, 5, nodesCols)}
+                    onKeyDown={(e) => onGridKeyDown(e, 'nodes', 1, i, 6, nodesCols)}
                     onFocus={() => applySelection({ kind: 'node', index: i }, true)}
                     data-grid="nodes"
                     data-row={1}
@@ -244,7 +244,7 @@ const ConcreteTabInner: React.FC<ConcreteTabProps> = ({
                       checked={n.project_b ?? true}
                       disabled={concretoLocked}
                       onChange={(e) => updateNode(i, { project_b: e.target.checked })}
-                      onKeyDown={(e) => onGridKeyDown(e as any, 'nodes', 2, i, 5, nodesCols)}
+                      onKeyDown={(e) => onGridKeyDown(e as any, 'nodes', 2, i, 6, nodesCols)}
                       onFocus={() => applySelection({ kind: 'node', index: i }, true)}
                       data-grid="nodes"
                       data-row={2}
@@ -264,7 +264,7 @@ const ConcreteTabInner: React.FC<ConcreteTabProps> = ({
                     fmt={fmt2}
                     parse={clampNumber}
                     onChange={(v) => updateNode(i, { a2: v })}
-                    onKeyDown={(e) => onGridKeyDown(e, 'nodes', 3, i, 5, nodesCols)}
+                    onKeyDown={(e) => onGridKeyDown(e, 'nodes', 3, i, 6, nodesCols)}
                     onFocus={() => applySelection({ kind: 'node', index: i }, true)}
                     data-grid="nodes"
                     data-row={3}
@@ -282,13 +282,36 @@ const ConcreteTabInner: React.FC<ConcreteTabProps> = ({
                       checked={n.project_a ?? true}
                       disabled={concretoLocked}
                       onChange={(e) => updateNode(i, { project_a: e.target.checked })}
-                      onKeyDown={(e) => onGridKeyDown(e as any, 'nodes', 4, i, 5, nodesCols)}
+                      onKeyDown={(e) => onGridKeyDown(e as any, 'nodes', 4, i, 6, nodesCols)}
                       onFocus={() => applySelection({ kind: 'node', index: i }, true)}
                       data-grid="nodes"
                       data-row={4}
                       data-col={i}
                     />
                   </label>
+                </div>
+              ))}
+
+              <div className="cell rowLabel">apoyo</div>
+              {(dev.nodes ?? []).map((n, i) => (
+                <div className={selection.kind === 'node' && selection.index === i ? 'cell cellSelected' : 'cell'} key={`node-st-${i}`}>
+                  <select
+                    className="cellInput"
+                    value={n.support_type ?? 'columna_inferior'}
+                    disabled={concretoLocked}
+                    onChange={(e) => updateNode(i, { support_type: e.target.value as any })}
+                    onFocus={() => applySelection({ kind: 'node', index: i }, true)}
+                    data-grid="nodes"
+                    data-row={5}
+                    data-col={i}
+                    style={{ fontSize: '0.7em', padding: '1px 2px', width: '100%' }}
+                  >
+                    <option value="columna_inferior">Col. inf</option>
+                    <option value="columna_superior">Col. sup</option>
+                    <option value="placa">Placa</option>
+                    <option value="apoyo_intermedio">Apoyo int.</option>
+                    <option value="ninguno">Ninguno</option>
+                  </select>
                 </div>
               ))}
             </div>

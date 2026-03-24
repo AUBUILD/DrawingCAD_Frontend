@@ -357,13 +357,13 @@ export const NuevaPanel: React.FC<NuevaPanelProps> = ({
           <Cap ch="Orden de importacion" />
           <select
             className="input"
-            style={{ height: 30 }}
+            style={{ height: 30, fontSize: 10 }}
             value={batchImportOrder}
             disabled={busy}
             onChange={(e) => setBatchImportOrder(e.target.value as 'name' | 'location')}
           >
-            <option value="name">Por nombre</option>
-            <option value="location">Por ubicacion (arriba→abajo, izq→der)</option>
+            <option value="name">Por nombre (orden natural numerico)</option>
+            <option value="location">Por ubicacion (arriba-abajo, izq-der)</option>
           </select>
         </div>
 
@@ -591,13 +591,13 @@ export const NuevaPanel: React.FC<NuevaPanelProps> = ({
           <Cap ch="Orden de importacion" />
           <select
             className="input"
-            style={{ height: 30 }}
+            style={{ height: 30, fontSize: 10 }}
             value={batchImportOrder}
             disabled={busy}
             onChange={(e) => setBatchImportOrder(e.target.value as 'name' | 'location')}
           >
-            <option value="name">Por nombre</option>
-            <option value="location">Por ubicacion (arriba→abajo, izq→der)</option>
+            <option value="name">Por nombre (orden natural numerico)</option>
+            <option value="location">Por ubicacion (arriba-abajo, izq-der)</option>
           </select>
         </div>
 
