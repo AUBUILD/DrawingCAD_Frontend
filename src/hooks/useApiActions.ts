@@ -225,23 +225,33 @@ export function useApiActions({
           setError('No hay vigas del tipo seleccionado para exportar.');
           return;
         }
-        // Sort: by name (beam number ascending) or by location (y asc, then x asc — bottom-left first)
+        // Sort: by name or by location (adaptive: detect horizontal vs vertical beams)
         const sorted = [...devsToExport].sort((a, b) => {
           if (exportOrder === 'location') {
-            const ya = a.y0 ?? 0, yb = b.y0 ?? 0;
-            if (ya !== yb) return ya - yb;
-            return (a.x0 ?? 0) - (b.x0 ?? 0);
+            // Detect dominant axis: if Y spread > X spread, beams are horizontal → sort by Y first
+            const allX = devsToExport.map(d => d.x0 ?? 0);
+            const allY = devsToExport.map(d => d.y0 ?? 0);
+            const spreadX = Math.max(...allX) - Math.min(...allX);
+            const spreadY = Math.max(...allY) - Math.min(...allY);
+            const [pa, sa] = spreadY > spreadX
+              ? [a.y0 ?? 0, a.x0 ?? 0]   // horizontal beams: Y primary
+              : [a.x0 ?? 0, a.y0 ?? 0];   // vertical beams: X primary
+            const [pb, sb] = spreadY > spreadX
+              ? [b.y0 ?? 0, b.x0 ?? 0]
+              : [b.x0 ?? 0, b.y0 ?? 0];
+            if (pa !== pb) return pa - pb;
+            return sa - sb;
           }
           const numA = parseInt((a.name ?? '').match(/\d+/)?.[0] ?? '999', 10);
           const numB = parseInt((b.name ?? '').match(/\d+/)?.[0] ?? '999', 10);
           return numA - numB;
         });
-        // Export all developments spaced vertically (first = bottom)
+        // Export all developments spaced vertically (first = bottom, always from origin)
         const VERTICAL_SPACING = 3.0; // meters between each beam
         const spacedDevs = sorted.map((d, i) => {
           const yOffset = i * VERTICAL_SPACING;
           const single = toPreviewPayloadSingle(d);
-          return { ...single, y0: (single.y0 ?? 0) + yOffset };
+          return { ...single, x0: 0, y0: yOffset };
         });
         const multiPayload = { developments: spacedDevs, savedCuts } as any;
         const blob = await exportDxf(multiPayload, { cascoLayer, steelLayer, drawSteel });
@@ -488,12 +498,21 @@ export function useApiActions({
           setError('No hay vigas del tipo seleccionado para exportar.');
           return;
         }
-        // Sort consistently with DXF export
+        // Sort consistently with DXF export (adaptive: horizontal vs vertical beams)
         const sorted = [...devsToExport].sort((a, b) => {
           if (exportOrder === 'location') {
-            const ya = a.y0 ?? 0, yb = b.y0 ?? 0;
-            if (ya !== yb) return ya - yb;
-            return (a.x0 ?? 0) - (b.x0 ?? 0);
+            const allX = devsToExport.map(d => d.x0 ?? 0);
+            const allY = devsToExport.map(d => d.y0 ?? 0);
+            const spreadX = Math.max(...allX) - Math.min(...allX);
+            const spreadY = Math.max(...allY) - Math.min(...allY);
+            const [pa, sa] = spreadY > spreadX
+              ? [a.y0 ?? 0, a.x0 ?? 0]
+              : [a.x0 ?? 0, a.y0 ?? 0];
+            const [pb, sb] = spreadY > spreadX
+              ? [b.y0 ?? 0, b.x0 ?? 0]
+              : [b.x0 ?? 0, b.y0 ?? 0];
+            if (pa !== pb) return pa - pb;
+            return sa - sb;
           }
           const numA = parseInt((a.name ?? '').match(/\d+/)?.[0] ?? '999', 10);
           const numB = parseInt((b.name ?? '').match(/\d+/)?.[0] ?? '999', 10);

@@ -688,8 +688,8 @@ export function normalizeDev(input: DevelopmentIn, appCfg: AppConfig): Developme
     floor_end: level_type === 'azotea' ? undefined : ((input as any).floor_end ?? (input as any).floorEnd ?? '9no'),
     d: appCfg.d,
     unit_scale: appCfg.unit_scale,
-    x0: appCfg.x0,
-    y0: appCfg.y0,
+    x0: (input as any).x0 ?? appCfg.x0,
+    y0: (input as any).y0 ?? appCfg.y0,
     recubrimiento: appCfg.recubrimiento,
     baston_Lc: appCfg.baston_Lc,
     steel_layout_settings: (() => {
